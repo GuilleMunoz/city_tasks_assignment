@@ -19,6 +19,7 @@ class Problem:
 
         self.days = 0
         self.shifts = 2
+        self.teams = 1
 
         if file_name is not None:
             self.load(file_name, dists_given=dists_given)
@@ -57,11 +58,15 @@ class Problem:
         *************** "file_name.tasks" ***************
 
         <Number of days (int)> D
+        <Number of teams (int)> E
 
         <base location (int)> n
 
         <tasks locations on the graph (ints)> n1 n2 ... nj
-        <tasks times (floats)> t1 t2 ... tj
+        <tasks times of team 0 (floats)> t1 t2 ... -1 % -1 = inf
+        <tasks times of team 1 (floats)> t1 -1 ... tj
+        ...
+        <tasks times of team E (floats)> -1 t2 ... -1
 
         % OPTIONAL
         <distance from 0 to the others (floats)> d00 d01 ... d0j
@@ -86,11 +91,18 @@ class Problem:
         with open(file_name, 'r') as tasks_file:
 
             self.days = int(tasks_file.readline()[:-1])
+            self.teams = int(tasks_file.readline()[:-1])
             self.tasks_loc = [int(tasks_file.readline()[:-1])] + list(map(int, tasks_file.readline()[:-1].split(' ')))
             self.tasks_times = list(map(float, tasks_file.readline()[:-1].split(' ')))
 
             self.tasks_loc = np.array(self.tasks_loc)
-            self.tasks_times = np.array(self.tasks_times)
+            self.tasks_times = np.zeros((self.teams, self.tasks_loc.shape[0]))
+
+            for i in range(self.teams):
+                line = tasks_file.readline()
+                times = list(map(float, line[:-1].split(' ')))
+                self.tasks_times[i] = np.array(times)
+                self.tasks_times[i, self.tasks_times[i] < 0] = np.inf
 
             if dists_given:
                 self.tasks_dists = np.zeros((self.tasks_times.shape[0], self.tasks_times.shape[0]))
@@ -112,6 +124,8 @@ class Problem:
         """
         T = int(self.tasks_dists.shape[0])
 
+        arr = np.array(ls).reshape(self.days, self.shifts, self.teams, T, T)
+
         print('\n\n************************ SOLUTION ************************\n')
 
         def format_(i):
@@ -122,29 +136,31 @@ class Problem:
         total_time = 0
         to_str = lambda x: '0{}'.format(x) if x < 10 else str(x)
 
-        for l in range(self.days):
-            for k in range(self.shifts):
-                print('Dia {} Turno {}:'.format(l, k))
-                i = 0
-                time = 0
-                last = -1
-                ss = set()
+        for i in range(self.days):
+            for j in range(self.shifts):
+                print('Dia {} Turno {}:'.format(i, j))
+                for k in range(self.teams):
+                    print('  Equipo {}:'.format(k + 1))
+                    index = 0
+                    time = 0
+                    last = -1
+                    ss = set()
 
-                for _ in range(T):
-                    if ls[(2 * l + k) * T * T] or i in ss:
-                        break
-                    print(format_(i), end=' -> ')
-                    ss.add(i)
-                    last = i
-                    i = ls[(2 * l + k) * T * T + i * T: (2 * l + k) * T * T + T * (i + 1)].index(1)
-                    time += self.tasks_dists[last, i] + self.tasks_times[i]
+                    for _ in range(T):
+                        if arr[i, j, k, 0, 0] or index in ss:
+                            break
+                        print(format_(index), end=' -> ')
+                        ss.add(index)
+                        last = index
+                        index = np.where(arr[i, j, k, index] == 1)[0][0]
+                        time += self.tasks_dists[last, index] + self.tasks_times[k, index]
 
-                total_time += time
+                    total_time += time
 
-                if last != -1:
-                    print('Base')
-                    print('\tDuración = {}:{} horas'.format(int(time),
-                                                            to_str(int((time - int(time)) * 60))))
+                    if last != -1:
+                        print('Base')
+                        print('\tDuración = {}:{} horas'.format(int(time),
+                                                                to_str(int((time - int(time)) * 60))))
 
         print('\nDuración total = {}:{} horas'.format(int(total_time),
                                                       to_str(int((total_time - int(total_time)) * 60))))
@@ -159,34 +175,34 @@ class Problem:
         # D = number of days
         # c = [x_0001, x_0101 , ..., x_1001, ..., x_0011, ..., x_0002, ..., x_TT1D]
         T = int(self.tasks_dists.shape[0]) - 1
-        dists = self.tasks_dists.flatten()
 
-        max_tasks_per_day = int(
-            8 / (np.min(self.tasks_times[1:]) + np.min(dists[np.arange(dists.shape[0]) % (T + 2) > 0])))
+        times = np.zeros((self.teams, T+1, T+1))
+        for team in range(self.teams):
+            times[team] = np.repeat(self.tasks_times[team], T + 1).reshape((T+1, T+1))
+
+        max_tasks_per_day = int(8 / (np.min(self.tasks_times[:, 1:]) + np.min(self.tasks_dists[1:, 1:])))
         max_tasks_per_day = min(max_tasks_per_day, T) + 1
-        times = np.repeat(self.tasks_times, T + 1)
-        c = np.tile(dists, self.days * self.shifts)
+
+        c = np.tile(self.tasks_dists.flatten(), self.days * self.shifts * self.teams)
 
         n_b = T  # (1)
-        n_b += self.days * self.shifts * T  # (2)
-        n_b += 2 * self.days * self.shifts  # (3)
+        n_b += self.days * self.shifts * self.teams * T  # (2)
+        n_b += self.days * self.shifts * self.teams  # (3.1)
+        n_b += self.days * self.shifts * self.teams  # (3.2)
         n_b += 1  # (4)
-        A = np.zeros((n_b, c.shape[0]))
+        A = np.zeros((n_b, self.days, self.shifts, self.teams, T+1, T+1))
         b = np.zeros((n_b,))
 
-        n_h = self.days * self.shifts  # (4)
-        n_h += sum([comb(T + 1, i) for i in range(2, max_tasks_per_day)]) * T * 2  # (5)
-        G = np.zeros((n_h, c.shape[0]))
+        n_h = self.days * self.shifts * self.teams  # (4)
+        n_h += self.days * self.shifts * self.teams * sum([comb(T + 1, i) for i in range(2, max_tasks_per_day)])  # (5)
+        G = np.zeros((n_h, self.days, self.shifts, self.teams, T+1, T+1))
         h = np.zeros((n_h,))
-
-        indices = np.arange(c.shape[0]) % ((T + 1) * (T + 1))
 
         def restr_1(shift_):
             # (1): Se realizan todas las tareas una vez.
 
-            for i in range(1, T + 1):
-                # A[shift_, (((T+1) * i) < indices) & (indices < ((T+1) * (i+1)))] = 1
-                A[shift_, indices % (T + 1) == i] = 1
+            for l in range(1, T + 1):
+                A[shift_, :, :, :, l, :] = 1
                 b[shift_] = 1
                 shift_ += 1
 
@@ -195,68 +211,67 @@ class Problem:
         def restr_2(shift_):
             # (2): Para cada turno, despues de una tarea siempre va otra
 
-            for l in range(0, self.days):
-                for k in range(0, self.shifts):
-                    row_shift = (T + 1) * (T + 1) * (l * 2 + k)
-                    for i in range(1, T + 1):
-                        A[shift_, row_shift + i * (T + 1): row_shift + (i + 1) * (T + 1)] = 1
-                        A[shift_, row_shift + i: row_shift + i + (T + 1) * (T + 1): (T + 1)] = -1
-                        A[shift_, row_shift + i * (T + 1) + i] = 0
+            for i in range(self.days):
+                for j in range(self.shifts):
+                    for k in range(self.teams):
+                        for l in range(1, T + 1):
+                            A[shift_, i, j, k, l, :] = 1
+                            A[shift_, i, j, k, :, l] = -1
+                            A[shift_, i, j, k, l, l] = 0
 
-                        shift_ += 1
+                            shift_ += 1
 
             return shift_
 
         def restr_3(shift_):
             # (3): En cada turno hay que salir y llegar de la base (la tarea 0)
-            for l in range(self.days):
-                for k in range(self.shifts):
-                    # x_{0jkl}
-                    A[shift_, (T + 1) * (T + 1) * (l * 2 + k): (T + 1) * (T + 1) * (l * 2 + k) + T + 1] = 1
-                    b[shift_] = 1
+            for i in range(self.days):
+                for j in range(self.shifts):
+                    for k in range(self.teams):
+                        #x_{xijk0m}
+                        A[shift_, i, j, k, 0, :] = 1
+                        b[shift_] = 1
 
-                    # x_{i0kl}
-                    A[shift_ + self.days * self.shifts,
-                    (T + 1) * (T + 1) * (l * 2 + k): (T + 1) * (T + 1) * (l * 2 + k + 1): T + 1] = 1
-                    b[shift_ + self.days * self.shifts] = 1
+                        # x_{xijkl0}
+                        A[shift_ + self.days * self.shifts * self.teams, i, j, k, :, 0] = 1
+                        b[shift_ + self.days * self.shifts * self.teams] = 1
 
-                    # x_{00kl}
-                    # A[shift_, (T + 1) * (T + 1) * (l * 2 + k)] = 0
-                    # A[shift_ + self.days * self.shifts, (T+1)*(T+1)*(l * 2 + k)] = 0
-
-                    shift_ += 1
+                        shift_ += 1
 
             return shift_
 
         def restr_4(shift_):
             # (4): No se puede ir desde una tarea a la misma (menos desde la base)
 
-            A[shift_, (indices > 0) & (indices % (T + 2) == 0)] = 1
+            for l in range(1, T+1):
+                A[shift_, :, :, :, l, l] = 1
+
             return shift_ + 1
 
         def restr_5(shift_):
             # (5): Cada turno dura 8 horas
-            for l in range(0, self.days):
-                for k in range(0, self.shifts):
-                    G[shift_, (T + 1) * (T + 1) * (l * 2 + k): (T + 1) * (T + 1) * (l * 2 + k + 1)] = dists + times
-                    h[shift_] = 8
-                    shift_ += 1
+            for i in range(0, self.days):
+                for j in range(0, self.shifts):
+                    for k in range(0, self.teams):
+                        G[shift_, i, j, k] = self.tasks_dists + times[k]
+                        h[shift_] = 8
+                        shift_ += 1
 
             return shift_
 
         def restr_6(shift_):
             # (6): Hay que tener en cuenta que no se hagan ciclos.
-            combs = [tup for n in range(2, max_tasks_per_day) for tup in combinations(range(1, T + 1), n)]
+            combs = [np.array(tup) for n in range(2, max_tasks_per_day) for tup in combinations(range(1, T + 1), n)]
 
-            for l in range(0, self.days):
-                for k in range(0, self.shifts):
-                    row_shift = (T + 1) * (T + 1) * (l * 2 + k)
-                    for S in combs:
-                        for i in S:
-                            for j in S:
-                                G[shift_, row_shift + i * (T + 1) + j] = 1
-                        h[shift_] = len(S) - 1
-                        shift_ += 1
+            for i in range(self.days):
+                for j in range(self.shifts):
+                    for k in range(self.teams):
+                        for S in combs:
+                            for l in S:
+                                for m in S:
+                                    G[shift_, i, j, k, l, m] = 1
+                            h[shift_] = len(S) - 1
+                            shift_ += 1
 
             return shift_
 
@@ -265,12 +280,14 @@ class Problem:
         restr_4(restr_3(shift))
         shift = 0
         shift = restr_5(shift)
-        shift = restr_6(shift)
+        restr_6(shift)
 
-        c = matrix(c)
-        G = matrix(G)
-        h = matrix(h)
+        A = A.reshape((n_b, c.shape[0]))
+        # return
         A = matrix(A)
+        G = matrix(G.reshape((n_h, c.shape[0])))
         b = matrix(b)
+        h = matrix(h)
+        c = matrix(c)
 
         return list(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
