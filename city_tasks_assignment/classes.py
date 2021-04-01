@@ -25,33 +25,45 @@ class Problem:
             self.load(file_name, dists_given=dists_given)
 
     def compute_dists(self, graph):
+        """
+        Computes distances using Dijkstra algorithm (from the tasks locations).
+
+        Args:
+            graph (networkit.graph.Graph)
+        """
         spsp = nk.distance.SPSP(graph, self.tasks_loc)
         spsp.run()
         self.tasks_dists = np.array([[ls[task] for task in self.tasks_loc] for ls in spsp.getDistances()])
 
-    def create_random(self, n_tasks, n_nodes, n_edges):
+    def create_random(self, n_tasks, n_teams, n_nodes=-1, n_edges=-1):
         """
         Creates random problem.
 
         Args:
             n_tasks (int):
             n_nodes (int):
-            n_edges (int):
+            n_edges (int, optional): If not given doestn creates a graph and uses Problem.computes_dist
+            n_teams (int, optional): If not given doestn creates a graph and uses Problem.computes_dist
         """
         from random import randint, sample, uniform
 
         self.days = randint(1, 20)
         self.tasks_loc = sample(range(n_nodes), n_tasks)
-        self.tasks_times = [.0] + [uniform(1, 50) for _ in range(n_tasks - 1)]
+        self.tasks_times = np.random.rand(n_teams, n_tasks)
+        self.tasks_times[:, 0] = 0
 
-        graph = nk.graph.Graph(n_nodes, weighted=True, directed=True)
-        edges = set()
-        while len(edges) < n_edges:
-            edges.add((randint(0, n_nodes - 1), randint(0, n_nodes - 1)))
-        for from_, to in edges:
-            graph.addEdge(from_, to, uniform(1, 50))
+        if n_nodes < 0 or n_edges < 0:
+            graph = nk.graph.Graph(n_nodes, weighted=True, directed=True)
+            edges = set()
+            while len(edges) < n_edges:
+                edges.add((randint(0, n_nodes - 1), randint(0, n_nodes - 1)))
+            for from_, to in edges:
+                graph.addEdge(from_, to, uniform(1, 50))
 
-        self.compute_dists(graph)
+            self.compute_dists(graph)
+        else:
+            self.tasks_dists = np.random.rand(n_tasks, n_tasks)  # # tiempos entre 0 y 1 horas.
+            np.fill_diagonal(self.tasks_dists, 0)
 
     def load(self, file_name, dists_given=False):
         """
@@ -178,7 +190,7 @@ class Problem:
 
         times = np.zeros((self.teams, T+1, T+1))
         for team in range(self.teams):
-            times[team] = np.repeat(self.tasks_times[team], T + 1).reshape((T+1, T+1))
+            times[team] = np.repeat(self.tasks_times[team], T+1).reshape((T+1, T+1))
 
         max_tasks_per_day = int(8 / (np.min(self.tasks_times[:, 1:]) + np.min(self.tasks_dists[1:, 1:])))
         max_tasks_per_day = min(max_tasks_per_day, T) + 1
@@ -194,14 +206,14 @@ class Problem:
         b = np.zeros((n_b,))
 
         n_h = self.days * self.shifts * self.teams  # (4)
-        n_h += self.days * self.shifts * self.teams * sum([comb(T + 1, i) for i in range(2, max_tasks_per_day)])  # (5)
+        n_h += self.days * self.shifts * self.teams * sum([comb(T+1, i) for i in range(2, max_tasks_per_day)])  # (5)
         G = np.zeros((n_h, self.days, self.shifts, self.teams, T+1, T+1))
         h = np.zeros((n_h,))
 
         def restr_1(shift_):
             # (1): Se realizan todas las tareas una vez.
 
-            for l in range(1, T + 1):
+            for l in range(1, T+1):
                 A[shift_, :, :, :, l, :] = 1
                 b[shift_] = 1
                 shift_ += 1
@@ -214,7 +226,7 @@ class Problem:
             for i in range(self.days):
                 for j in range(self.shifts):
                     for k in range(self.teams):
-                        for l in range(1, T + 1):
+                        for l in range(1, T+1):
                             A[shift_, i, j, k, l, :] = 1
                             A[shift_, i, j, k, :, l] = -1
                             A[shift_, i, j, k, l, l] = 0
@@ -254,6 +266,7 @@ class Problem:
                 for j in range(0, self.shifts):
                     for k in range(0, self.teams):
                         G[shift_, i, j, k] = self.tasks_dists + times[k]
+                        print(times[k])
                         h[shift_] = 8
                         shift_ += 1
 
@@ -261,15 +274,14 @@ class Problem:
 
         def restr_6(shift_):
             # (6): Hay que tener en cuenta que no se hagan ciclos.
-            combs = [np.array(tup) for n in range(2, max_tasks_per_day) for tup in combinations(range(1, T + 1), n)]
+            combs = [np.array(tup) for n in range(2, max_tasks_per_day) for tup in combinations(range(1, T+1), n)]
 
             for i in range(self.days):
                 for j in range(self.shifts):
                     for k in range(self.teams):
                         for S in combs:
                             for l in S:
-                                for m in S:
-                                    G[shift_, i, j, k, l, m] = 1
+                                G[shift_, i, j, k, l, S] = 1
                             h[shift_] = len(S) - 1
                             shift_ += 1
 
@@ -282,9 +294,7 @@ class Problem:
         shift = restr_5(shift)
         restr_6(shift)
 
-        A = A.reshape((n_b, c.shape[0]))
-        # return
-        A = matrix(A)
+        A = matrix(A.reshape((n_b, c.shape[0])))
         G = matrix(G.reshape((n_h, c.shape[0])))
         b = matrix(b)
         h = matrix(h)
