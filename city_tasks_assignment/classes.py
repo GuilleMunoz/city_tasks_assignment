@@ -11,11 +11,11 @@ class Problem:
 
     def __init__(self, file_name=None, dists_given=False):
         # task_loc[0] = location of the base
-        self.tasks_loc = []
+        self.tasks_loc = np.array([])
         # task_times[0] = 0
-        self.tasks_times = []
+        self.tasks_times = np.array([])
 
-        self.tasks_dists = []
+        self.tasks_dists = np.array([])
 
         self.days = 0
         self.shifts = 2
@@ -126,9 +126,9 @@ class Problem:
             graph = nk.readGraph(file_name + '.graph', nk.Format.EdgeList, separator=' ', firstNode=0, directed=True)
             self.compute_dists(graph)
 
-    def show_sol(self, ls):
+    def show_ilp_sol(self, ls):
         """
-        Displays the solution (ls) obtained by optimize.
+        Displays the solution (ls) obtained by ilp_optimize.
 
         Args:
             ls (list):
@@ -177,9 +177,10 @@ class Problem:
         print('\nDuración total = {}:{} horas'.format(int(total_time),
                                                       to_str(int((total_time - int(total_time)) * 60))))
 
-    def optimize(self):
+    def ilp_optimize(self):
         """
-        Optimizes the given problem.
+        Optimizes the given problem using integer linear programming.
+
         Returns:
             (list)
         """
@@ -195,7 +196,8 @@ class Problem:
         max_tasks_per_day = int(8 / (np.min(self.tasks_times[:, 1:]) + np.min(self.tasks_dists[1:, 1:])))
         max_tasks_per_day = min(max_tasks_per_day, T) + 1
 
-        c = np.tile(self.tasks_dists.flatten(), self.days * self.shifts * self.teams)
+        c_ = times + self.tasks_dists  # TODO: Añadir tiempos a distancias a latex
+        c = np.tile(c_.flatten(), self.days * self.shifts)
 
         n_b = T  # (1)
         n_b += self.days * self.shifts * self.teams * T  # (2)
@@ -266,7 +268,6 @@ class Problem:
                 for j in range(0, self.shifts):
                     for k in range(0, self.teams):
                         G[shift_, i, j, k] = self.tasks_dists + times[k]
-                        print(times[k])
                         h[shift_] = 8
                         shift_ += 1
 
@@ -301,3 +302,96 @@ class Problem:
         c = matrix(c)
 
         return list(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
+
+    def show_sa_sol(self, conf):
+        """
+        Displays the solution (ls) obtained by sa_optimize.
+
+        Args:
+            ls (list):
+        """
+        n_tasks = self.tasks_loc.shape[0] - 1
+        total_time = 0
+        for team in range(self.teams):
+
+            time = 0
+            from_ = 0
+            shifts = 0
+            days = 1
+            print(f"Team {team}")
+            print(f"\tDay {shifts % (self.days * self.shifts) + 1} Shift 0: Base",
+                  end=" -> ")
+
+            for task in range(n_tasks):
+                to = conf[team * n_tasks + task]
+                if to < 0:
+                    continue
+                temp = self.tasks_dists[from_,  to] + \
+                       self.tasks_times[team, to] + \
+                       self.tasks_dists[to, 0]
+
+                if time + temp > 8:
+                    time += self.tasks_dists[from_, 0]
+                    total_time += time
+                    time = self.tasks_dists[0, to] + self.tasks_times[team, to]
+                    if shifts == self.shifts - 1:
+                        days += 1
+                        shifts = 0
+                    else:
+                        shifts += 1
+                    print(f"Base\n\tDay {days} Shift {shifts}: Base",
+                          end=" -> ")
+                else:
+                    time += temp - self.tasks_dists[to, 0];
+
+                print(f"Tarea {to}", end=" -> ")
+                from_ = to
+            print(f'Base')
+            if from_ != 0:
+                total_time += time + self.tasks_dists[from_, 0]
+            if shifts > self.days * self.shifts:
+                print("TO MANY SHIFTS")
+
+        to_str = lambda x: '0{}'.format(x) if x < 10 else str(x)
+        print('\nDuración total = {}:{} horas'.format(int(total_time),
+                                                      to_str(int((total_time - int(total_time)) * 60))))
+
+    def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=100,
+                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=20, cooling_rate=.9):
+        """
+        Simulated anneling implementetion for finding a solution. Uses C extension.
+        To compile the extension: "python3 salib/setup.py build_ext --inplace"
+
+        Args:
+            coef (float, default=1.5):
+            rearrange_opt (int, default=0): if 1 -> opposite
+                                       if 2 -> permute
+                                       if 3 -> replace
+                                       else -> swap
+            max_space (int, default=10): max space beetween tasks in swap
+            hamming_dist_perc (float, default=.1): maximum hamming distance accepted for permutation
+            temp_steps (int, default=100): number of temperature steps
+            tries_per_temp (int, default=100000): number of tries per temperature step
+            ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
+            ini_temperature (float, default=20.): initial temperature
+            cooling_rate (float, default=1.5): cooling rate
+
+        Returns:
+            (float, list(int), list(float)): fitness, conf and fitness on each temperature step
+
+        """
+
+        import city_tasks_assignment.salib.simulated_annealing as sa
+
+        n_tasks = self.tasks_loc.shape[0]
+
+        dists = list(np.reshape(self.tasks_dists, (n_tasks * n_tasks, )))
+        times = list(np.reshape(self.tasks_times, (self.teams * n_tasks, )))
+
+        n_tasks -= 1
+        fitness, conf, ls_fitness = sa.run(self.days, self.shifts, self.teams, n_tasks, times, dists,
+                                           coef, rearrange_opt, max_space, hamming_dist_perc, temp_steps,
+                                           tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
+
+        return fitness, conf, ls_fitness
+
