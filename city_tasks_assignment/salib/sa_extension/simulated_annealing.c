@@ -57,7 +57,7 @@ PyObject* to_pylist_fitness(double *arr, int len)
 
 static PyObject *py_run(PyObject *self, PyObject *args) 
 {
-    int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange;
+    int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange, steps;
     double coef, ini_temperature, cooling_rate, hamming_dist_perc, tries_per_temp;
     double * arr_fitness;
 
@@ -82,13 +82,13 @@ static PyObject *py_run(PyObject *self, PyObject *args)
                         
 	sol = (struct Solution) {&info, -1, create_conf(n_tasks, n_teams)};
 
-    arr_fitness = run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate);
+    arr_fitness = run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate, &steps);
 
     ret = PyTuple_New(3);
 
     PyTuple_SetItem(ret, 0, PyFloat_FromDouble(sol.fitness));
     PyTuple_SetItem(ret, 1, to_pylist_conf(sol.configuration, n_teams * n_tasks));
-    PyTuple_SetItem(ret, 2, to_pylist_fitness(arr_fitness, temp_steps + 1));
+    PyTuple_SetItem(ret, 2, to_pylist_fitness(arr_fitness, steps));
 
     free(info.tasks_times); free(info.tasks_dists); free(sol.configuration); free(arr_fitness);
     return ret;

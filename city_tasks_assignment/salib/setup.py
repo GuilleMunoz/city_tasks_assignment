@@ -9,6 +9,7 @@ def main():
                                  ["sa_extension/simulated_annealing.c", "src/simulated_annealing_.c"],
                                  include_dirs=["src"])]
         )
-#python3 setup.py install 
+# python3 setup.py install
+# python3 setup.py build_ext --inplace
 if __name__ == "__main__":
     main()

@@ -18,6 +18,6 @@ struct Solution
 };
 
 int * create_conf(int n_tasks, int n_teams);
-double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tries_per_temp, int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate);
+double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tries_per_temp, int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate, int *steps);
 
 #endif // HEURISTICS_SA_H

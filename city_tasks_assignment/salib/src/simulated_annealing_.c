@@ -20,6 +20,8 @@ int* create_conf(int n_tasks, int n_teams)
 	int i;
 	int *configuration;
 
+	srand(time(NULL));
+
 	if (!(configuration = (int *)malloc(sizeof(int) * n_tasks * n_teams)))
 	{
 		printf("ERROR: Unable to allocate memory: %lu\n", sizeof(int) * n_tasks * n_teams);
@@ -32,7 +34,6 @@ int* create_conf(int n_tasks, int n_teams)
 	for (i = n_tasks; i < n_teams * n_tasks; i++)
 		configuration[i] = -1;
 	
-	//srand(time(NULL));
 	for(i = n_teams * n_tasks - 1; i>0; i--)
 		swap(&configuration[i], &configuration[rand() % (i+1)]);
 
@@ -55,7 +56,6 @@ static double evaluate(struct Solution* sol)
 		for (j = 0; j < sol->info->TASKS; ++j)
 		{
 			to = sol->configuration[team * sol->info->TASKS + j];
-
 			if (to < 0){continue;}
 			
 			temp = sol->info->tasks_dists[from * offset + to] + 
@@ -90,7 +90,6 @@ static double evaluate(struct Solution* sol)
 			if (shifts > sol->info->DAYS * sol->info->SHIFTS)
 			{
 				total_time += coef * time;
-				coef += 1;
 			}
 			else
 			{
@@ -169,7 +168,6 @@ static void replace(struct Solution* sol, int n)
 		printf("ERROR: Unable to allocate memory: %lu\n", sizeof(int) * n);
 		exit(-1);
 	}
-	//srand(time(NULL));
 
 	start = rand() % (len - n);
 	new_pos = rand() % (len - n - 1);
@@ -197,19 +195,36 @@ static void replace(struct Solution* sol, int n)
 	free(temp);
 }
 
+static void remute(struct Solution *sol, int n)
+{
+	if (rand()/RAND_MAX < .5)
+	{
+		replace(sol, n);
+	}
+	else
+	{
+		permute(sol, n);
+	}
+}
 
 double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tries_per_temp,
-					 int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate)
+					 int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate, int* steps)
 {
 
 	void (*rearrange)(struct Solution *, int);  // Rearrange function that will be used
 	int *temp_conf = NULL;
 
 	char *chrs = "/-\\|/-\\|";
-	int tasks_to_rearrange = ini_tasks_to_rearrange, conf_len = sol->info->TEAMS * sol->info->TASKS;
+	int conf_len = sol->info->TEAMS * sol->info->TASKS;
+	int tasks_to_rearrange = ini_tasks_to_rearrange >= conf_len ? ini_tasks_to_rearrange : round(conf_len / 10);
+	if (tasks_to_rearrange <= 0)
+	{
+		tasks_to_rearrange = 4;
+	}
+	
 	double fitness, diff, temperature = ini_temperature, max_succ_per_temp = tries_per_temp /10;
 	double *arr_fitness = (double *) malloc(sizeof(double) * (temp_steps + 1));
-	int succ_per_temp;
+	int succ_per_temp, i;
 
 	srand(time(NULL));
 
@@ -233,6 +248,9 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 	case 3:
 		rearrange = &replace;
 		break;
+	case 4:
+		rearrange = &remute;
+		break;
 	default:
 		rearrange = &swap_cities;
 	}
@@ -241,7 +259,7 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 	memcpy(temp_conf, sol->configuration, sizeof(int) * conf_len);
 
 	arr_fitness[0] = fitness;
-	for (int i = 0; i < temp_steps; i++)
+	for (i = 0; i < temp_steps; i++)
 	{	
 		printf("\r%c Searching for a solution: %.2d%%", chrs[i%8], (100 * i / temp_steps));
 		fflush(stdout);
@@ -267,7 +285,10 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 				break;
 		}
 		arr_fitness[i + 1] = fitness;
-		if (succ_per_temp == 0) break; // No succes
+		if (succ_per_temp == 0) {
+		    *steps = i;
+		    break; // No succes
+		}
 		temperature *= cooling_rate;
 	}
 	evaluate(sol);
@@ -275,6 +296,6 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 	fflush(stdout);
 
 	free(temp_conf);
-
+	*steps = i;
 	return arr_fitness;
 }
