@@ -35,11 +35,13 @@ class Problem:
         spsp.run()
         self.tasks_dists = np.array([[ls[task] for task in self.tasks_loc] for ls in spsp.getDistances()])
 
-    def create_random(self, n_tasks, n_teams, n_nodes=-1, n_edges=-1):
+    def create_random(self, n_tasks, n_teams, n_shifts=2, n_days=-1, n_nodes=-1, n_edges=-1):
         """
         Creates random problem.
 
         Args:
+            n_shifts(int, optional):
+            n_days(int, optional):
             n_tasks (int):
             n_nodes (int):
             n_edges (int, optional): If not given doestn creates a graph and uses Problem.computes_dist
@@ -47,12 +49,15 @@ class Problem:
         """
         from random import randint, sample, uniform
 
-        self.days = randint(1, 20)
-        self.tasks_loc = sample(range(n_nodes), n_tasks)
+        self.days = randint(1, 20) if n_days < 0 else n_days
+        self.shifts = n_shifts
+        self.teams = n_teams
         self.tasks_times = np.random.rand(n_teams, n_tasks)
+        self.tasks_times *= 2
         self.tasks_times[:, 0] = 0
 
-        if n_nodes < 0 or n_edges < 0:
+        if n_nodes > 0 or n_edges > 0:
+            self.tasks_loc = sample(range(n_nodes), n_tasks)
             graph = nk.graph.Graph(n_nodes, weighted=True, directed=True)
             edges = set()
             while len(edges) < n_edges:
@@ -62,8 +67,10 @@ class Problem:
 
             self.compute_dists(graph)
         else:
-            self.tasks_dists = np.random.rand(n_tasks, n_tasks)  # # tiempos entre 0 y 1 horas.
+            self.tasks_loc = np.arange(n_tasks)
+            self.tasks_dists = np.random.rand(n_tasks, n_tasks)  # # tiempos entre 0 y 1 hora.
             np.fill_diagonal(self.tasks_dists, 0)
+            self.tasks_dists *= 2
 
     def load(self, file_name, dists_given=False):
         """
@@ -100,7 +107,7 @@ class Problem:
             dists_given (bool): True if the distances are given in "file_name.tasks"
         """
 
-        with open(file_name, 'r') as tasks_file:
+        with open(file_name + '.tasks', 'r') as tasks_file:
 
             self.days = int(tasks_file.readline()[:-1])
             self.teams = int(tasks_file.readline()[:-1])
@@ -112,15 +119,14 @@ class Problem:
 
             for i in range(self.teams):
                 line = tasks_file.readline()
-                times = list(map(float, line[:-1].split(' ')))
+                times = [0] + list(map(float, line[:-1].split(' ')))
                 self.tasks_times[i] = np.array(times)
                 self.tasks_times[i, self.tasks_times[i] < 0] = np.inf
 
             if dists_given:
-                self.tasks_dists = np.zeros((self.tasks_times.shape[0], self.tasks_times.shape[0]))
+                self.tasks_dists = np.empty((self.tasks_times.shape[0], self.tasks_times.shape[0]))
                 for i, line in enumerate(tasks_file.readlines()):
-                    dists = list(map(float, line[:-1].split(' ')))
-                    self.tasks_dists[0] = np.array(dists)
+                    self.tasks_dists[i] = np.array(map(float, line[:-1].split(' ')))
 
         if not dists_given and isfile(file_name + '.graph'):
             graph = nk.readGraph(file_name + '.graph', nk.Format.EdgeList, separator=' ', firstNode=0, directed=True)
@@ -182,11 +188,11 @@ class Problem:
         Optimizes the given problem using integer linear programming.
 
         Returns:
-            (list)
+            fitness, (np.array)
         """
         # T = number of tasks
         # D = number of days
-        # c = [x_0001, x_0101 , ..., x_1001, ..., x_0011, ..., x_0002, ..., x_TT1D]
+
         T = int(self.tasks_dists.shape[0]) - 1
 
         times = np.zeros((self.teams, T+1, T+1))
@@ -222,22 +228,8 @@ class Problem:
 
             return shift_
 
+
         def restr_2(shift_):
-            # (2): Para cada turno, despues de una tarea siempre va otra
-
-            for i in range(self.days):
-                for j in range(self.shifts):
-                    for k in range(self.teams):
-                        for l in range(1, T+1):
-                            A[shift_, i, j, k, l, :] = 1
-                            A[shift_, i, j, k, :, l] = -1
-                            A[shift_, i, j, k, l, l] = 0
-
-                            shift_ += 1
-
-            return shift_
-
-        def restr_3(shift_):
             # (3): En cada turno hay que salir y llegar de la base (la tarea 0)
             for i in range(self.days):
                 for j in range(self.shifts):
@@ -254,7 +246,22 @@ class Problem:
 
             return shift_
 
-        def restr_4(shift_):
+        def restr_31(shift_):
+            # (2): Para cada turno, despues de una tarea siempre va otra
+
+            for i in range(self.days):
+                for j in range(self.shifts):
+                    for k in range(self.teams):
+                        for l in range(1, T+1):
+                            A[shift_, i, j, k, l, :] = 1
+                            A[shift_, i, j, k, :, l] = -1
+                            A[shift_, i, j, k, l, l] = 0
+
+                            shift_ += 1
+
+            return shift_
+
+        def restr_32(shift_):
             # (4): No se puede ir desde una tarea a la misma (menos desde la base)
 
             for l in range(1, T+1):
@@ -262,7 +269,7 @@ class Problem:
 
             return shift_ + 1
 
-        def restr_5(shift_):
+        def restr_4(shift_):
             # (5): Cada turno dura 8 horas
             for i in range(0, self.days):
                 for j in range(0, self.shifts):
@@ -273,7 +280,7 @@ class Problem:
 
             return shift_
 
-        def restr_6(shift_):
+        def restr_5(shift_):
             # (6): Hay que tener en cuenta que no se hagan ciclos.
             combs = [np.array(tup) for n in range(2, max_tasks_per_day) for tup in combinations(range(1, T+1), n)]
 
@@ -288,20 +295,24 @@ class Problem:
 
             return shift_
 
+        # A
         shift = restr_1(0)
         shift = restr_2(shift)
-        restr_4(restr_3(shift))
-        shift = 0
-        shift = restr_5(shift)
-        restr_6(shift)
+        restr_32(restr_31(shift))
+
+        # G
+        shift = restr_4(0)
+        restr_5(shift)
 
         A = matrix(A.reshape((n_b, c.shape[0])))
         G = matrix(G.reshape((n_h, c.shape[0])))
+
         b = matrix(b)
         h = matrix(h)
         c = matrix(c)
 
-        return list(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
+        arr = np.array(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
+        return np.sum(np.multiply(arr, c)), arr
 
     def show_sa_sol(self, conf):
         """
@@ -356,8 +367,8 @@ class Problem:
         print('\nDuración total = {}:{} horas'.format(int(total_time),
                                                       to_str(int((total_time - int(total_time)) * 60))))
 
-    def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=100,
-                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=20, cooling_rate=.9):
+    def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
+                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
         """
         Simulated anneling implementetion for finding a solution. Uses C extension.
         To compile the extension: "python3 salib/setup.py build_ext --inplace"
