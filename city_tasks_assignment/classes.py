@@ -405,9 +405,35 @@ class Problem:
 
         return fitness, conf, ls_fitness
 
-    def sa_stoch(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
-                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
+    def montecarlo_simulation(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10,
+                              hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10,
+                              ini_temperature=200, cooling_rate=.9):
+        """
+        Montecarlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
+        Writes every solution (fitness and conffiguration) in a file (fname) and the plots a histogram.
 
+        Args:
+            fname (str): File name to write results to.
+            va_dists (list(float)): Variance for the distance between tasks.
+            va_times (list(float)): Variance for tasks times.
+            its (int, default=1000): Number of iterations for the montecarlo simulation.
+            coef (float, default=1.5):
+            rearrange_opt (int, default=0): if 1 -> opposite
+                                       if 2 -> permute
+                                       if 3 -> replace
+                                       else -> swap
+            max_space (int, default=10): max space beetween tasks in swap
+            hamming_dist_perc (float, default=.1): maximum hamming distance accepted for permutation
+            temp_steps (int, default=100): number of temperature steps
+            tries_per_temp (int, default=100000): number of tries per temperature step
+            ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
+            ini_temperature (float, default=20.): initial temperature
+            cooling_rate (float, default=1.5): cooling rate
+
+        Returns:
+            (float, list(int), list(float)): fitness, conf and fitness on each temperature step
+
+        """
         n_tasks = self.tasks_loc.shape[0]
 
         dists = np.reshape(self.tasks_dists, (n_tasks * n_tasks,))
@@ -417,9 +443,9 @@ class Problem:
         times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
 
         n_tasks -= 1
-        sa.run_stoch(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
-                     max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
-                     ini_temperature, cooling_rate)
+        sa.run_montecarlo(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
+                             max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
+                             ini_temperature, cooling_rate)
 
         with open(fname, 'r') as file:
             fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % 2 == 0]

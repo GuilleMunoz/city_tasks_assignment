@@ -139,7 +139,7 @@ static void print_sol(FILE *fp, struct Solution *sol)
 }
 
 
-static PyObject *py_run_stoch(PyObject *self, PyObject *args) 
+static PyObject *py_run_montecarlo(PyObject *self, PyObject *args)
 {
     int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange, steps;
     double coef, ini_temperature, cooling_rate, hamming_dist_perc, tries_per_temp;
@@ -225,8 +225,9 @@ PyDoc_STRVAR(py_run_doc,
                 "\nReturns:\n"
                 "   (int, list): fitness and conf");
 
-PyDoc_STRVAR(py_run_stoch_doc, 
-                "Python interface for a C implementation of simulated anneling for city tasks assigment\n"
+PyDoc_STRVAR(py_run_montecarlo_doc,
+                "Montecarlo simulation\n"
+                "Writes every solution (fitness and conffiguration) in a file (fname) and the plots a histogram.\n"
                 "\nArguments:\n"
                 "   fname (str): File name"
                 "   its (int): Number of tries"
@@ -250,7 +251,7 @@ PyDoc_STRVAR(py_run_stoch_doc,
 
 static PyMethodDef SAMethods[] = {
     {"run", py_run, METH_VARARGS, py_run_doc},
-    {"run_stoch", py_run_stoch, METH_VARARGS, py_run_stoch_doc},
+    {"run_montecarlo", py_run_montecarlo, METH_VARARGS, py_run_montecarlo_doc},
     {NULL, NULL, 0, NULL} 
 };
 
