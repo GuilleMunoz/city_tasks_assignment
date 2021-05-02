@@ -6,7 +6,6 @@
 #include <stdio.h>
 
 
-
 static void swap(int *a, int *b)
 {
 	int temp = *a;
@@ -20,11 +19,9 @@ int* create_conf(int n_tasks, int n_teams)
 	int i;
 	int *configuration;
 
-	srand(time(NULL));
-
 	if (!(configuration = (int *)malloc(sizeof(int) * n_tasks * n_teams)))
 	{
-		printf("ERROR: Unable to allocate memory: %lu\n", sizeof(int) * n_tasks * n_teams);
+		printf("CREATE CONF: ERROR, unable to allocate memory: %lu\n", sizeof(int) * n_tasks * n_teams);
 		exit(-1);
 	}
 
@@ -158,6 +155,10 @@ static void permute(struct Solution *sol, int n)
 }
 
 
+/**
+ * 
+ * 
+ */
 static void replace(struct Solution* sol, int n)
 {
 	int i, start, new_pos, len = sol->info->TEAMS * sol->info->TASKS;
@@ -165,7 +166,7 @@ static void replace(struct Solution* sol, int n)
 
 	if (!(temp = (int *) malloc(sizeof(int) * n)))
 	{
-		printf("ERROR: Unable to allocate memory: %lu\n", sizeof(int) * n);
+		printf("SA REPLACE: ERROR, unable to allocate memory: %lu\n", sizeof(int) * n);
 		exit(-1);
 	}
 
@@ -195,6 +196,7 @@ static void replace(struct Solution* sol, int n)
 	free(temp);
 }
 
+
 static void remute(struct Solution *sol, int n)
 {
 	if (rand()/RAND_MAX < .5)
@@ -207,8 +209,10 @@ static void remute(struct Solution *sol, int n)
 	}
 }
 
+
 double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tries_per_temp,
-					 int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate, int* steps)
+					 int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate,
+					 int* steps, char* message)
 {
 
 	void (*rearrange)(struct Solution *, int);  // Rearrange function that will be used
@@ -223,14 +227,19 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 	}
 	
 	double fitness, diff, temperature = ini_temperature, max_succ_per_temp = tries_per_temp /10;
-	double *arr_fitness = (double *) malloc(sizeof(double) * (temp_steps + 1));
+	double *arr_fitness;
 	int succ_per_temp, i;
 
-	srand(time(NULL));
-
+	//srand(time(NULL));
+	if (!(arr_fitness = (double *) malloc(sizeof(double) * (temp_steps + 1))))
+	{
+		printf("SA RUN: ERROR, unable to allocate memory: %lu\n", sizeof(double) * (temp_steps + 1));
+		exit(-1);
+	}
+	
 	if (!(temp_conf = (int *)malloc(sizeof(int) * conf_len)))
 	{
-		printf("ERROR: Unable to allocate memory: %lu\n", sizeof(int) * conf_len);
+		printf("SA RUN: ERROR, unable to allocate memory: %lu\n", sizeof(int) * conf_len);
 		exit(-1);
 	}
 
@@ -261,7 +270,7 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 	arr_fitness[0] = fitness;
 	for (i = 0; i < temp_steps; i++)
 	{	
-		printf("\r%c Searching for a solution: %.2d%%", chrs[i%8], (100 * i / temp_steps));
+		printf("\r%s%c Searching for a solution: %.2d%%",message, chrs[i%8], (100 * i / temp_steps));
 		fflush(stdout);
 
 		succ_per_temp = 0;

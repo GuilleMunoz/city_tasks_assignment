@@ -5,7 +5,8 @@ from cvxopt.glpk import ilp
 from cvxopt import matrix
 from math import comb
 from os.path import isfile
-
+from matplotlib import pyplot as plt
+from city_tasks_assignment.salib import simulated_annealing as sa
 
 class Problem:
 
@@ -112,14 +113,14 @@ class Problem:
             self.days = int(tasks_file.readline()[:-1])
             self.teams = int(tasks_file.readline()[:-1])
             self.tasks_loc = [int(tasks_file.readline()[:-1])] + list(map(int, tasks_file.readline()[:-1].split(' ')))
-            self.tasks_times = list(map(float, tasks_file.readline()[:-1].split(' ')))
+            # self.tasks_times = list(map(float, tasks_file.readline()[:-1].split(' ')))
 
             self.tasks_loc = np.array(self.tasks_loc)
             self.tasks_times = np.zeros((self.teams, self.tasks_loc.shape[0]))
 
             for i in range(self.teams):
                 line = tasks_file.readline()
-                times = [0] + list(map(float, line[:-1].split(' ')))
+                times = [0.] + list(map(float, line[:-1].split(' ')))
                 self.tasks_times[i] = np.array(times)
                 self.tasks_times[i, self.tasks_times[i] < 0] = np.inf
 
@@ -392,8 +393,6 @@ class Problem:
 
         """
 
-        import city_tasks_assignment.salib.simulated_annealing as sa
-
         n_tasks = self.tasks_loc.shape[0]
 
         dists = list(np.reshape(self.tasks_dists, (n_tasks * n_tasks, )))
@@ -406,3 +405,24 @@ class Problem:
 
         return fitness, conf, ls_fitness
 
+    def sa_stoch(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
+                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
+
+        n_tasks = self.tasks_loc.shape[0]
+
+        dists = np.reshape(self.tasks_dists, (n_tasks * n_tasks,))
+        dists = [var_dists[i // 2] if i % 2 else dists[i // 2] for i in range(2 * dists.shape[0])]
+
+        times = np.reshape(self.tasks_times, (self.teams * n_tasks,))
+        times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
+
+        n_tasks -= 1
+        sa.run_stoch(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
+                     max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
+                     ini_temperature, cooling_rate)
+
+        with open(fname, 'r') as file:
+            fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % 2 == 0]
+            m, M = min(fs), max(fs)
+            plt.hist(fs, np.arange(m, M, (M - m)/(its/5)))
+            plt.show()
