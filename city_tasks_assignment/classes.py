@@ -30,7 +30,7 @@ class Problem:
         Computes distances using Dijkstra algorithm (from the tasks locations).
 
         Args:
-            graph (networkit.graph.Graph)
+            graph (networkit.graph.Graph): the graph of the problem
         """
         spsp = nk.distance.SPSP(graph, self.tasks_loc)
         spsp.run()
@@ -38,15 +38,15 @@ class Problem:
 
     def create_random(self, n_tasks, n_teams, n_shifts=2, n_days=-1, n_nodes=-1, n_edges=-1):
         """
-        Creates random problem.
+        Creates a random problem.
 
         Args:
-            n_shifts(int, optional):
-            n_days(int, optional):
-            n_tasks (int):
-            n_nodes (int):
-            n_edges (int, optional): If not given doestn creates a graph and uses Problem.computes_dist
-            n_teams (int, optional): If not given doestn creates a graph and uses Problem.computes_dist
+            n_tasks (int): Number of tasks (counting with the base = task 0)
+            n_teams (int): Number of teams
+            n_shifts (int, default): Number of shifts in a day
+            n_days (int, default=-1): If not given n_days is a random int between (1 and 20)
+            n_nodes (int, default=-1): If n_nodes and n_edges given, creates a graph and uses Problem.computes_dist
+            n_edges (int, default=-1): If n_nodes and n_edges given, creates a graph and uses Problem.computes_dist
         """
         from random import randint, sample, uniform
 
@@ -57,7 +57,7 @@ class Problem:
         self.tasks_times *= 2
         self.tasks_times[:, 0] = 0
 
-        if n_nodes > 0 or n_edges > 0:
+        if n_nodes > 0 and n_edges > 0:
             self.tasks_loc = sample(range(n_nodes), n_tasks)
             graph = nk.graph.Graph(n_nodes, weighted=True, directed=True)
             edges = set()
@@ -75,7 +75,11 @@ class Problem:
 
     def load(self, file_name, dists_given=False):
         """
-        *************** "file_name.tasks" ***************
+        Loads a problem from one or two (if not dists_given) files. The first one <file_name>.tasks
+        gives general info of the problem number of days, ... and the second contains the graph edges.
+        The format is the following:
+
+        *************** "<file_name>.tasks" ***************
 
         <Number of days (int)> D
         <Number of teams (int)> E
@@ -95,8 +99,8 @@ class Problem:
         <distance from j to the others (floats)> dj0 dj1 ... djj
 
 
-        If the distances are given it doesn't load the graph
-        *************** "file_name.graph" ***************
+        % If the distances are given it doesn't load the graph
+        *************** "<file_name>.graph" ***************
 
         <edge1 (ints)> n1 n2 w1
         <edge2 (ints)> n1 n3 w2
@@ -104,8 +108,8 @@ class Problem:
         <edgei (ints)> nj nk wi
 
         Args:
-            file_name (str):
-            dists_given (bool): True if the distances are given in "file_name.tasks"
+            file_name (str): the name of the file (without the extension)
+            dists_given (bool): True if the distances are given in "<file_name>.tasks"
         """
 
         with open(file_name + '.tasks', 'r') as tasks_file:
@@ -371,7 +375,7 @@ class Problem:
     def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
                     tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
         """
-        Simulated anneling implementetion for finding a solution. Uses C extension.
+        Simulated annealing implementetion for finding a solution. Uses C extension.
         To compile the extension: "python3 salib/setup.py build_ext --inplace"
 
         Args:
@@ -393,30 +397,33 @@ class Problem:
 
         """
 
+        # Prepare data for the algorithm
         n_tasks = self.tasks_loc.shape[0]
 
         dists = list(np.reshape(self.tasks_dists, (n_tasks * n_tasks, )))
         times = list(np.reshape(self.tasks_times, (self.teams * n_tasks, )))
 
         n_tasks -= 1
+
+        # Run the simulated annealing algorithm
         fitness, conf, ls_fitness = sa.run(self.days, self.shifts, self.teams, n_tasks, times, dists,
                                            coef, rearrange_opt, max_space, hamming_dist_perc, temp_steps,
                                            tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
 
         return fitness, conf, ls_fitness
 
-    def montecarlo_simulation(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10,
+    def monte_carlo_simulation(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10,
                               hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10,
                               ini_temperature=200, cooling_rate=.9):
         """
-        Montecarlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
+        Monte Carlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
         Writes every solution (fitness and conffiguration) in a file (fname) and the plots a histogram.
 
         Args:
             fname (str): File name to write results to.
             va_dists (list(float)): Variance for the distance between tasks.
             va_times (list(float)): Variance for tasks times.
-            its (int, default=1000): Number of iterations for the montecarlo simulation.
+            its (int, default=1000): Number of iterations for the Monte Carlo simulation.
             coef (float, default=1.5):
             rearrange_opt (int, default=0): if 1 -> opposite
                                        if 2 -> permute
@@ -429,13 +436,10 @@ class Problem:
             ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
             ini_temperature (float, default=20.): initial temperature
             cooling_rate (float, default=1.5): cooling rate
-
-        Returns:
-            (float, list(int), list(float)): fitness, conf and fitness on each temperature step
-
         """
         n_tasks = self.tasks_loc.shape[0]
 
+        # Join mean and variance arrays
         dists = np.reshape(self.tasks_dists, (n_tasks * n_tasks,))
         dists = [var_dists[i // 2] if i % 2 else dists[i // 2] for i in range(2 * dists.shape[0])]
 
@@ -443,12 +447,16 @@ class Problem:
         times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
 
         n_tasks -= 1
-        sa.run_montecarlo(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
+        # Run Monte Carlo simulation
+        sa.run_monte_carlo(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
                              max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
                              ini_temperature, cooling_rate)
 
+        # Read results of the Monte Carlo simulation
         with open(fname, 'r') as file:
             fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % 2 == 0]
             m, M = min(fs), max(fs)
+
+            # Plots the results
             plt.hist(fs, np.arange(m, M, (M - m)/(its/5)))
             plt.show()

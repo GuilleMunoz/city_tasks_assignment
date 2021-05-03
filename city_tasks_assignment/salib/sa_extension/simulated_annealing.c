@@ -3,6 +3,13 @@
 #include "../src/norm.h"
 
 
+/**
+ * Transforms a Python list of floats to a C array (of doubles)
+ * 
+ * @param list PyObject, Python list
+ * @param len int, length of the list
+ * @return The array
+ */
 double* to_arr(PyObject *list, int len)
 {
     double *arr;
@@ -23,6 +30,13 @@ double* to_arr(PyObject *list, int len)
 }
 
 
+/**
+ * Transforms a array of ints to a Python list of ints (longs)
+ * 
+ * @param arr pointer to an array of int, The array to transform.
+ * @param len int, length of the array.
+ * @return PyObject, the Python list.
+ */
 PyObject* to_pylist_conf(int *arr, int len)
 {
     int i;
@@ -37,6 +51,13 @@ PyObject* to_pylist_conf(int *arr, int len)
 }
 
 
+/**
+ * Transforms a array of doubles to a Python list of floats
+ * 
+ * @param arr pointer to an array of double, The array to transform.
+ * @param len int, length of the array.
+ * @return PyObject, the Python list.
+ */
 PyObject* to_pylist_fitness(double *arr, int len)
 {
     int i;
@@ -57,6 +78,35 @@ PyObject* to_pylist_fitness(double *arr, int len)
 }
 
 
+PyDoc_STRVAR(py_run_doc, 
+                "Python interface for a C implementation of simulated annealing for city tasks assigment\n"
+                "\nArguments:\n"
+                "   ndays (int): Number of days\n"
+                "   nshifts (int):\n"
+                "   nteams (int):\n"
+                "   ntasks (int): Number of tasks (WITHOUT THE BASE)\n"
+                "   tasks_times (1d list(double)): List of times: t_{ij} = time that team i spends on task j t_{i0} = 0\n"
+                "   tasks_dists (1d list(double)): List of dists: distance between tasks\n"
+                "   coef (double): Coefficient that will be multiplied to the shift time if the team has to work more\n"
+                "   rearrange_opt (int): 1 -> opposite,\n"
+                "                        2 -> permute,\n"
+                "                        3 -> replace,\n"
+                "                        4 -> replace or permute,\n"
+                "                        if other int swap\n"
+                "   max_space (int): max space beetween tasks in swap\n"
+                "   hamming_dist_perc (double): hamming distance for permutation\n"
+                "   temp_steps (int): number of temeprature steps\n"
+                "   tries_per_temp (double):"
+                "   ini_tasks_to_rearrange (int): number of tasks to rearrange at first\n"
+                "   ini_temperature (double): initial temperature\n"
+                "   cooling_rate (double):\n"
+                "\nReturns:\n"
+                "   (int, list): fitness and conf");
+
+/**
+ * Extension to run method of simulated_anneling_. See py_run_doc.
+ * 
+ */
 static PyObject *py_run(PyObject *self, PyObject *args) 
 {
     int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange, steps;
@@ -108,6 +158,10 @@ static PyObject *py_run(PyObject *self, PyObject *args)
  * The mean and variance of each element is defined in mean_var_arr:
  *      The mean of the i-th element is mean_var_arr[2i]
  *      The variance of the ith element is mean_var_arr[2i + 1]
+ * 
+ * @param mean_var_arr pointer to array of doubles, the mean and variance. The length has to be >= 2 * len.
+ * @param arr pointer to array of doubles, the random array
+ * @param len int, length of arr
 */
 static void arr_norm(double *mean_var_arr, double *arr, int len)
 {
@@ -120,8 +174,11 @@ static void arr_norm(double *mean_var_arr, double *arr, int len)
 
 
 /**
- * 
  * Prints a solution (sol) to an opened file pointed by fp.
+ * If fp is null exist with -1.
+ * 
+ * @param fp pointer to a FILE, file to print
+ * @param sol pointer to a struct Solution, the solution to be printed
 */
 static void print_sol(FILE *fp, struct Solution *sol)
 {
@@ -139,7 +196,40 @@ static void print_sol(FILE *fp, struct Solution *sol)
 }
 
 
-static PyObject *py_run_montecarlo(PyObject *self, PyObject *args)
+PyDoc_STRVAR(py_run_monte_carlo_doc,
+                "Monte Carlo simulation using simulated annealing.\n"
+                "The uncertainty factors will be the times between tasks and the tasks times.\n"
+                "Writes every solution (fitness and conffiguration) in a file (fname)\n"
+                "\nArguments:\n"
+                "   fname (str): File name to write each solution.\n"
+                "   its (int): Number of tries.\n"
+                "   ndays (int): Number of days.\n"
+                "   nshifts (int): Number of shifts.\n"
+                "   nteams (int): Number of teams.\n"
+                "   ntasks (int): Number of tasks (WITHOUT THE BASE).\n"
+                "   mean_var_times (1d list(double)): List of times of length 2 * nteams * (ntasks + 1)\n"
+                "   mean_var_dists (1d list(double)): List of dists of length 2 * (ntasks + 1)**2\n"
+                "   coef (double): Coefficient that will be multiplied to the shift time if the team has to work more\n"
+                "   rearrange_opt (int): 1 -> opposite,\n"
+                "                        2 -> permute,\n"
+                "                        3 -> replace,\n"
+                "                        4 -> replace or permute,\n"
+                "                        if other int swap\n"
+                "   max_space (int): max space beetween tasks in swap\n"
+                "   hamming_dist_perc (double): hamming distance for permutation\n"
+                "   temp_steps (int): number of temeprature steps\n"
+                "   tries_per_temp (double):\n"
+                "   ini_tasks_to_rearrange (int): number of tasks to rearrange at first\n"
+                "   ini_temperature (double): initial temperature\n"
+                "   cooling_rate (double):\n"
+                "\nReturns:\n"
+                "   int: Number of iterations");
+
+/**
+ * Runs a Monte Carlo simulation of the problem. See py_run_monte_carlo_doc for doc.
+ * 
+ */
+static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
 {
     int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange, steps;
     double coef, ini_temperature, cooling_rate, hamming_dist_perc, tries_per_temp;
@@ -191,7 +281,7 @@ static PyObject *py_run_montecarlo(PyObject *self, PyObject *args)
         arr_norm(mean_var_t, sol.info->tasks_times, n_teams * (n_tasks + 1));
         arr_norm(mean_var_d, sol.info->tasks_dists, (n_tasks + 1) * (n_tasks + 1));
 
-        // Run simulatted anneling
+        // Run simulatted annealing
         run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate,
             &steps, message);
         // Print the solution
@@ -204,54 +294,9 @@ static PyObject *py_run_montecarlo(PyObject *self, PyObject *args)
 }
 
 
-PyDoc_STRVAR(py_run_doc, 
-                "Python interface for a C implementation of simulated anneling for city tasks assigment\n"
-                "\nArguments:\n"
-                "   ndays (int): Number of days\n"
-                "   nshifts (int):\n"
-                "   nteams (int):\n"
-                "   ntasks (int):\n"
-                "   tasks_times (1d list(double)): List of times: t_{ij} = time that team i spends on task j t_{i0} = 0\n"
-                "   tasks_dists (1d list(double)): List of dists: distance between tasks\n"
-                "   coef (double): How\n"
-                "   rearrange_opt (int): 1 -> opposite, 2 -> permute, 3 -> replace if other int swap\n"
-                "   max_space (int): max space beetween tasks in swap\n"
-                "   hamming_dist_perc (double): hamming distance for permutation\n"
-                "   temp_steps (int): number of temeprature steps\n"
-                "   tries_per_temp (double):"
-                "   ini_tasks_to_rearrange (int): number of tasks to rearrange at first\n"
-                "   ini_temperature (double): initial temperature\n"
-                "   cooling_rate (double):\n"
-                "\nReturns:\n"
-                "   (int, list): fitness and conf");
-
-PyDoc_STRVAR(py_run_montecarlo_doc,
-                "Montecarlo simulation\n"
-                "Writes every solution (fitness and conffiguration) in a file (fname) and the plots a histogram.\n"
-                "\nArguments:\n"
-                "   fname (str): File name"
-                "   its (int): Number of tries"
-                "   ndays (int): Number of days\n"
-                "   nshifts (int):\n"
-                "   nteams (int):\n"
-                "   ntasks (int):\n"
-                "   tasks_times (1d list(double)): List of times: t_{ij} = time that team i spends on task j t_{i0} = 0\n"
-                "   tasks_dists (1d list(double)): List of dists: distance between tasks\n"
-                "   coef (double): How\n"
-                "   rearrange_opt (int): 1 -> opposite, 2 -> permute, 3 -> replace if other int swap\n"
-                "   max_space (int): max space beetween tasks in swap\n"
-                "   hamming_dist_perc (double): hamming distance for permutation\n"
-                "   temp_steps (int): number of temeprature steps\n"
-                "   tries_per_temp (double):"
-                "   ini_tasks_to_rearrange (int): number of tasks to rearrange at first\n"
-                "   ini_temperature (double): initial temperature\n"
-                "   cooling_rate (double):\n"
-                "\nReturns:\n"
-                "   int");
-
 static PyMethodDef SAMethods[] = {
     {"run", py_run, METH_VARARGS, py_run_doc},
-    {"run_montecarlo", py_run_montecarlo, METH_VARARGS, py_run_montecarlo_doc},
+    {"run_monte_carlo", py_run_monte_carlo, METH_VARARGS, py_run_monte_carlo_doc},
     {NULL, NULL, 0, NULL} 
 };
 
@@ -259,7 +304,7 @@ static PyMethodDef SAMethods[] = {
 static struct PyModuleDef SAmodule = {
     PyModuleDef_HEAD_INIT,
     "simulated_annealing",
-    "Python interface for a C implementation of simulated anneling for city tasks assigment",
+    "Python interface for a C implementation of simulated annealing for city tasks assigment",
     -1,
     SAMethods
 };

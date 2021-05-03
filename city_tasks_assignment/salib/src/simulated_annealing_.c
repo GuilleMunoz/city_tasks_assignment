@@ -6,6 +6,12 @@
 #include <stdio.h>
 
 
+/**
+ * Swaps to integers
+ * 
+ * @param a pointer to an integer
+ * @param b pointer to an integer
+ */ 
 static void swap(int *a, int *b)
 {
 	int temp = *a;
@@ -13,7 +19,13 @@ static void swap(int *a, int *b)
 	*b = temp;
 }
 
-
+/**
+ * Creates a random configuration for the problem as a continous array.
+ * 
+ * @param n_tasks number of tasks of the problem
+ * @param n_teams number of teams of the problem
+ * @return array of length n_tasks * n_teams of integers, the configuration
+ */
 int* create_conf(int n_tasks, int n_teams)
 {	
 	int i;
@@ -38,6 +50,13 @@ int* create_conf(int n_tasks, int n_teams)
 }
 
 
+/**
+ * Evaluates a given solution. 
+ * Sets the fitness of the solution to the correct value.
+ * 
+ * @param sol pointer to a struct Solution
+ * @return double, the fitness
+ */
 static double evaluate(struct Solution* sol)
 {	
 	double total_time = 0, time, temp, coef;
@@ -100,7 +119,13 @@ static double evaluate(struct Solution* sol)
 }
 
 
-static void swap_cities(struct Solution *sol, int n)
+/**
+ * Swaps n tasks with a maximum distance between them.
+ * 
+ * @param sol pointer to a struct Solution 
+ * @param n int, number of tasks to swap
+ */
+static void swap_tasks(struct Solution *sol, int n)
 {
 	int j, offset, len = sol->info->TEAMS * sol->info->TASKS;
 	//srand(time(NULL));
@@ -119,6 +144,12 @@ static void swap_cities(struct Solution *sol, int n)
 }
 
 
+/**
+ * Puts a section of the configuration in the opposite order.
+ * 
+ * @param sol pointer to a struct Solution
+ * @param n int, length of the section
+ */
 static void opposite_order(struct Solution *sol, int n)
 {
 	int i, start, len = sol->info->TEAMS * sol->info->TASKS;
@@ -132,6 +163,13 @@ static void opposite_order(struct Solution *sol, int n)
 }
 
 
+/**
+ * Permutes a section of the configuration. The maximum Hamming distance of the resulting permutation is
+ * given in by sol->info->hamming_dist_perc.
+ * 
+ * @param sol pointer to a struct Solution
+ * @param n int, length of the section
+ */
 static void permute(struct Solution *sol, int n)
 {
 	int a, b, hamming_dist, start, len = sol->info->TEAMS * sol->info->TASKS;
@@ -156,8 +194,10 @@ static void permute(struct Solution *sol, int n)
 
 
 /**
+ * Removes a section of the configuration and places in another randomly slected part of the configuration.
  * 
- * 
+ * @param sol pointer to a struct Solution
+ * @param n int, length of the section
  */
 static void replace(struct Solution* sol, int n)
 {
@@ -197,6 +237,13 @@ static void replace(struct Solution* sol, int n)
 }
 
 
+/**
+ * Throws a coin and decides whether to do the replace method or the permute one 
+ * (the two most effectives rearrangements).
+ * 
+ * @param sol pointer to a struct Solution
+ * @param n int, length of the section
+ */
 static void remute(struct Solution *sol, int n)
 {
 	if (rand()/RAND_MAX < .5)
@@ -210,6 +257,28 @@ static void remute(struct Solution *sol, int n)
 }
 
 
+/**
+ * Runs the simulated annealing algorithm.
+ * 
+ * @param sol pointer to a struct Solution, everything has to be initialize .
+ * @param rearrange_opt int, the rearrange method that will be used:
+* 								1 -> opposite_order
+* 								2 -> permute
+* 								3 -> replace
+* 								4 -> replace or permute
+* 								other int -> swap_tasks
+ * @param temp_steps int, number of temperature steps ie. number of times the initial temperature will be 
+ * 						  multiplied by the cooling rate.
+ * @param tries_per_temp int, number of rearrangements to try for every temperature.
+ * @param ini_tasks_to_rearrange int, number of tasks to rearrange. If less or equal to 0, the number of tasks 
+ * 									  to rearrange will be 4.
+ * @param ini_temperature double, initial temperature.
+ * @param cooling_rate double, cooling rate (<1).
+ * @param steps pointer to an integer, at the end the integer will be the number of temperature steps in made.
+ * @param message string, message to print on each step.
+ * @return array of double of size temp_steps, the final fitness on all the steps. If the algorithm finishes early,
+ * 		   the last part of the array is meaningless. 
+ */
 double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tries_per_temp,
 					 int ini_tasks_to_rearrange, double ini_temperature, double cooling_rate,
 					 int* steps, char* message)
@@ -245,9 +314,6 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 
 	switch (rearrange_opt)
 	{
-	case 0:
-		rearrange = &swap_cities;
-		break;
 	case 1:
 		rearrange = &opposite_order;
 		break;
@@ -261,7 +327,7 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 		rearrange = &remute;
 		break;
 	default:
-		rearrange = &swap_cities;
+		rearrange = &swap_tasks;
 	}
 
 	fitness = evaluate(sol);
