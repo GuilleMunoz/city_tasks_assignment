@@ -427,12 +427,33 @@ class Problem:
 
         return fitness, conf, ls_fitness
 
+    @staticmethod
+    def plot_fs_MC(fs, its, hist=True):
+        """
+        Plots the fitnesses of the Monte Carlo simulation. If hist plots a histogram else box and whiskers.
+
+        Args:
+            fs: fitnesses of the Monte Carlo simulation.
+            its: Number of iterations of the Monte Carlo simulation.
+            hist (boolean, default=True):
+
+        """
+        if hist:
+            m, M = min(fs), max(fs)
+            # Plots the fitnesses
+            plt.hist(fs, np.arange(m, M, (M - m) / (its / 5)))  # Divide the interval in its / 5 chunks
+        else:
+            plt.boxplot(fs, vert=False)
+            plt.yticks([])
+        # Shows the plot
+        plt.show()
+
     def monte_carlo_simulation(self, fname, var_dists, var_times, its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10,
                               hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10,
                               ini_temperature=200, cooling_rate=.9):
         """
         Monte Carlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
-        Writes every solution (fitness and if print_conf configuration) in a file (fname) and the plots a histogram.
+        Writes every solution (fitness and if print_conf configuration) in a file (fname) and returns the fitnesses
 
         Args:
             fname (str): File name to write results to.
@@ -452,6 +473,10 @@ class Problem:
             ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
             ini_temperature (float, default=20.): initial temperature
             cooling_rate (float, default=1.5): cooling rate
+
+        Returns:
+            list(double): The fitnesses of the Monte Carlo simulation
+
         """
         n_tasks = self.tasks_loc.shape[0]
 
@@ -468,11 +493,9 @@ class Problem:
                              max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
                              ini_temperature, cooling_rate)
 
+        fs = []
         # Read results of the Monte Carlo simulation
         with open(fname, 'r') as file:
             fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % (print_conf + 1) == 0]
-            m, M = min(fs), max(fs)
 
-            # Plots the results
-            plt.hist(fs, np.arange(m, M, (M - m)/(its/5))) # Divide the interval in its / 5 chunks
-            plt.show()
+        return fs
