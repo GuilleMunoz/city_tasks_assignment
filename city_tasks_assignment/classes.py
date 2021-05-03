@@ -32,6 +32,8 @@ class Problem:
         Args:
             graph (networkit.graph.Graph): the graph of the problem
         """
+        # import networkit as nk
+
         spsp = nk.distance.SPSP(graph, self.tasks_loc)
         spsp.run()
         self.tasks_dists = np.array([[ls[task] for task in self.tasks_loc] for ls in spsp.getDistances()])
@@ -49,6 +51,7 @@ class Problem:
             n_edges (int, default=-1): If n_nodes and n_edges given, creates a graph and uses Problem.computes_dist
         """
         from random import randint, sample, uniform
+        # import networkit as nk
 
         self.days = randint(1, 20) if n_days < 0 else n_days
         self.shifts = n_shifts
@@ -111,6 +114,7 @@ class Problem:
             file_name (str): the name of the file (without the extension)
             dists_given (bool): True if the distances are given in "<file_name>.tasks"
         """
+        import networkit as nk
 
         with open(file_name + '.tasks', 'r') as tasks_file:
 
@@ -137,56 +141,116 @@ class Problem:
             graph = nk.readGraph(file_name + '.graph', nk.Format.EdgeList, separator=' ', firstNode=0, directed=True)
             self.compute_dists(graph)
 
-    def show_ilp_sol(self, ls):
+    def to_std_ilp(self, ls):
         """
-        Displays the solution (ls) obtained by ilp_optimize.
+        Transform the solution obtained by ilp_optimize to an standard form ie. list where the i-th element of
+        it is the order of tasks the team i will execute. The first element is always 0 (Starts in the base).
 
         Args:
-            ls (list):
+            ls (list(int)): Solution obtained by ilp_optimize
 
+        Returns:
+            (list(int)) The solution in the standard form.
         """
-        T = int(self.tasks_dists.shape[0])
 
+        T = int(self.tasks_dists.shape[0])
         arr = np.array(ls).reshape(self.days, self.shifts, self.teams, T, T)
 
-        print('\n\n************************ SOLUTION ************************\n')
-
-        def format_(i):
-            if i == 0:
-                return '\tBase'
-            return 'Tarea {}'.format(i)
-
-        total_time = 0
-        to_str = lambda x: '0{}'.format(x) if x < 10 else str(x)
+        std = [list() for i in range(self.teams)]
 
         for i in range(self.days):
             for j in range(self.shifts):
-                print('Dia {} Turno {}:'.format(i, j))
                 for k in range(self.teams):
-                    print('  Equipo {}:'.format(k + 1))
                     index = 0
-                    time = 0
                     last = -1
                     ss = set()
-
                     for _ in range(T):
                         if arr[i, j, k, 0, 0] or index in ss:
                             break
-                        print(format_(index), end=' -> ')
+                        std[k].append(index)
                         ss.add(index)
                         last = index
                         index = np.where(arr[i, j, k, index] == 1)[0][0]
-                        time += self.tasks_dists[last, index] + self.tasks_times[k, index]
-
-                    total_time += time
 
                     if last != -1:
-                        print('Base')
-                        print('\tDuración = {}:{} horas'.format(int(time),
-                                                                to_str(int((time - int(time)) * 60))))
+                        std[k].append(0)
 
-        print('\nDuración total = {}:{} horas'.format(int(total_time),
-                                                      to_str(int((total_time - int(total_time)) * 60))))
+        return std
+
+    def to_std_sa(self, ls):
+        """
+        Transform the solution obtained by sa_optimize to an standard form ie. list where the i-th element of
+        it is the order of tasks the team i will execute. The first element is always 0 (Starts in the base).
+
+        Args:
+            ls (list(int)): Solution obtained by sa_optimize
+
+        Returns:
+            (list(int)) The solution in the standard form.
+        """
+
+        n_tasks = self.tasks_loc.shape[0] - 1
+
+        std = [list() for i in range(self.teams)]
+
+        for team in range(self.teams):
+            from_ = 0
+            time = 0
+            std[team].append(from_)
+
+            for task in range(n_tasks):
+                to = ls[team * n_tasks + task]
+                if to < 0:
+                    continue
+                temp = self.tasks_dists[from_, to] + self.tasks_times[team, to] + self.tasks_dists[to, 0]
+
+                if time + temp > 8:
+                    time = self.tasks_dists[0, to] + self.tasks_times[team, to]
+                    std[team].append(0)
+                else:
+                    time += temp - self.tasks_dists[to, 0]
+
+                std[team].append(to)
+                from_ = to
+
+            std[team].append(0)
+
+        return std
+
+    def show_sol(self, ls, is_ilp=True):
+        """
+        Displays the solution (ls) obtained by ilp_optimize if is_ilp or by sa_optimize
+
+        Args:
+            ls (list):
+        """
+        std = self.to_std_ilp(ls) if is_ilp else self.to_std_sa(ls)
+
+        def to_str(x):
+            return '0{}'.format(x) if x < 10 else str(x)
+
+        for team in range(self.teams):
+            shift = 0
+            from_ = 0
+            time = 0
+            print(f"Team {team}:")
+            print(f"\tDay 0 Shift 0: Base", end="")
+            for i, to in enumerate(std[team][1:]):
+                time += self.tasks_dists[from_][to] + self.tasks_times[team][to]
+                if to == 0:
+                    if from_ != 0:
+                        print(" -> Base")
+                        print("\tTIME: {}:{} horas".format(int(time), to_str(int((time - int(time)) * 60))))
+                    else:
+                        print()
+                    if i < len(std[team]) - 1:
+                        print()
+                        print(f"\tDay {shift // self.days} Shift {shift % self.shifts}: Base", end="")
+                    time = 0
+                else:
+                    print(f" -> Task {to}", end="")
+                from_ = to
+            print("\n")
 
     def ilp_optimize(self):
         """
@@ -197,6 +261,10 @@ class Problem:
         """
         # T = number of tasks
         # D = number of days
+
+
+        # from cvxopt.glpk import ilp
+        # from cvxopt import matrix
 
         T = int(self.tasks_dists.shape[0]) - 1
 
@@ -319,59 +387,6 @@ class Problem:
         arr = np.array(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
         return np.sum(np.multiply(arr, c)), arr
 
-    def show_sa_sol(self, conf):
-        """
-        Displays the solution (ls) obtained by sa_optimize.
-
-        Args:
-            ls (list):
-        """
-        n_tasks = self.tasks_loc.shape[0] - 1
-        total_time = 0
-        for team in range(self.teams):
-
-            time = 0
-            from_ = 0
-            shifts = 0
-            days = 1
-            print(f"Team {team}")
-            print(f"\tDay {shifts % (self.days * self.shifts) + 1} Shift 0: Base",
-                  end=" -> ")
-
-            for task in range(n_tasks):
-                to = conf[team * n_tasks + task]
-                if to < 0:
-                    continue
-                temp = self.tasks_dists[from_,  to] + \
-                       self.tasks_times[team, to] + \
-                       self.tasks_dists[to, 0]
-
-                if time + temp > 8:
-                    time += self.tasks_dists[from_, 0]
-                    total_time += time
-                    time = self.tasks_dists[0, to] + self.tasks_times[team, to]
-                    if shifts == self.shifts - 1:
-                        days += 1
-                        shifts = 0
-                    else:
-                        shifts += 1
-                    print(f"Base\n\tDay {days} Shift {shifts}: Base",
-                          end=" -> ")
-                else:
-                    time += temp - self.tasks_dists[to, 0];
-
-                print(f"Tarea {to}", end=" -> ")
-                from_ = to
-            print(f'Base')
-            if from_ != 0:
-                total_time += time + self.tasks_dists[from_, 0]
-            if shifts > self.days * self.shifts:
-                print("TO MANY SHIFTS")
-
-        to_str = lambda x: '0{}'.format(x) if x < 10 else str(x)
-        print('\nDuración total = {}:{} horas'.format(int(total_time),
-                                                      to_str(int((total_time - int(total_time)) * 60))))
-
     def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
                     tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
         """
@@ -405,25 +420,26 @@ class Problem:
 
         n_tasks -= 1
 
-        # Run the simulated annealing algorithm
+        # Run the simulated annealing algorithm in C
         fitness, conf, ls_fitness = sa.run(self.days, self.shifts, self.teams, n_tasks, times, dists,
                                            coef, rearrange_opt, max_space, hamming_dist_perc, temp_steps,
                                            tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
 
         return fitness, conf, ls_fitness
 
-    def monte_carlo_simulation(self, fname, var_dists, var_times, its=1000, coef=1.5, rearrange_opt=3, max_space=10,
+    def monte_carlo_simulation(self, fname, var_dists, var_times, its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10,
                               hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10,
                               ini_temperature=200, cooling_rate=.9):
         """
         Monte Carlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
-        Writes every solution (fitness and conffiguration) in a file (fname) and the plots a histogram.
+        Writes every solution (fitness and if print_conf configuration) in a file (fname) and the plots a histogram.
 
         Args:
             fname (str): File name to write results to.
             va_dists (list(float)): Variance for the distance between tasks.
             va_times (list(float)): Variance for tasks times.
             its (int, default=1000): Number of iterations for the Monte Carlo simulation.
+            print_conf (boolean, default=True): True if write configuration to fname.
             coef (float, default=1.5):
             rearrange_opt (int, default=0): if 1 -> opposite
                                        if 2 -> permute
@@ -447,16 +463,16 @@ class Problem:
         times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
 
         n_tasks -= 1
-        # Run Monte Carlo simulation
-        sa.run_monte_carlo(fname, its, self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
+        # Run Monte Carlo simulation in C
+        sa.run_monte_carlo(fname, its, int(print_conf), self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
                              max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
                              ini_temperature, cooling_rate)
 
         # Read results of the Monte Carlo simulation
         with open(fname, 'r') as file:
-            fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % 2 == 0]
+            fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % (print_conf + 1) == 0]
             m, M = min(fs), max(fs)
 
             # Plots the results
-            plt.hist(fs, np.arange(m, M, (M - m)/(its/5)))
+            plt.hist(fs, np.arange(m, M, (M - m)/(its/5))) # Divide the interval in its / 5 chunks
             plt.show()

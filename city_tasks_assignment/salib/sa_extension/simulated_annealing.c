@@ -179,8 +179,9 @@ static void arr_norm(double *mean_var_arr, double *arr, int len)
  * 
  * @param fp pointer to a FILE, file to print
  * @param sol pointer to a struct Solution, the solution to be printed
+ * @param print_conf int, 1 if print configuration to fp, 0 otherwise
 */
-static void print_sol(FILE *fp, struct Solution *sol)
+static void print_sol(FILE *fp, struct Solution *sol, int print_conf)
 {
     if (!fp)
     {
@@ -188,21 +189,25 @@ static void print_sol(FILE *fp, struct Solution *sol)
     }
     
     fprintf(fp, "%f\n", sol->fitness);
-    for (int i = 0; i < sol->info->TEAMS * sol->info->TASKS; i++)
+    if (print_conf)
     {
-        fprintf(fp, "%d ", sol->configuration[i]);
+        for (int i = 0; i < sol->info->TEAMS * sol->info->TASKS; i++)
+        {
+            fprintf(fp, "%d ", sol->configuration[i]);
+        }
+        fprintf(fp, "\n");
     }
-    fprintf(fp, "\n");
 }
 
 
 PyDoc_STRVAR(py_run_monte_carlo_doc,
                 "Monte Carlo simulation using simulated annealing.\n"
                 "The uncertainty factors will be the times between tasks and the tasks times.\n"
-                "Writes every solution (fitness and conffiguration) in a file (fname)\n"
+                "Writes every solution (fitness and if print_conf configuration) in a file (fname)\n"
                 "\nArguments:\n"
                 "   fname (str): File name to write each solution.\n"
                 "   its (int): Number of tries.\n"
+                "   print_conf (int):  1 if print configuration to fname, 0 otherwise\n"
                 "   ndays (int): Number of days.\n"
                 "   nshifts (int): Number of shifts.\n"
                 "   nteams (int): Number of teams.\n"
@@ -233,7 +238,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
 {
     int n_days, n_shifts, n_teams, n_tasks, rearrange_opt, max_space, temp_steps, ini_tasks_to_rearrange, steps;
     double coef, ini_temperature, cooling_rate, hamming_dist_perc, tries_per_temp;
-    int its;
+    int its, print_conf;
     FILE *fp;
 
 	PyObject* mean_var_times; double *mean_var_t;
@@ -245,7 +250,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     struct Solution sol;
 
     // Pass args
-    if(!PyArg_ParseTuple(args, "siiiiiOOdiidididd", &fname, &its, &n_days, &n_shifts, &n_teams, &n_tasks, 
+    if(!PyArg_ParseTuple(args, "siiiiiiOOdiidididd", &fname, &its, &print_conf, &n_days, &n_shifts, &n_teams, &n_tasks, 
                          &mean_var_times, &mean_var_dists, &coef, 
                          &rearrange_opt, &max_space, &hamming_dist_perc,
                          &temp_steps, &tries_per_temp, &ini_tasks_to_rearrange,
@@ -285,7 +290,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
         run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate,
             &steps, message);
         // Print the solution
-        print_sol(fp, &sol);
+        print_sol(fp, &sol, print_conf);
     }
     fclose(fp);
 
