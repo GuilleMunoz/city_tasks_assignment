@@ -60,6 +60,9 @@ class Problem:
         self.tasks_times *= 2
         self.tasks_times[:, 0] = 0
 
+        self.tasks_costs = np.random.rand(n_tasks - 1, n_days * n_shifts + 1)
+        self.teams_costs = np.random.rand(n_teams, n_days * n_shifts + 1)
+
         if n_nodes > 0 and n_edges > 0:
             self.tasks_loc = sample(range(n_nodes), n_tasks)
             graph = nk.graph.Graph(n_nodes, weighted=True, directed=True)
@@ -219,7 +222,7 @@ class Problem:
 
     def show_sol(self, ls, is_ilp=True):
         """
-        Displays the solution (ls) obtained by ilp_optimize if is_ilp or by sa_optimize
+        Displays the solution (ls) obtained by ilp_optimize if is_ilp or by sa_optimize.
 
         Args:
             ls (list):
@@ -254,7 +257,8 @@ class Problem:
 
     def ilp_optimize(self):
         """
-        Optimizes the given problem using integer linear programming.
+        Optimizes the given problem using integer linear programming. Works only with one objective programing:
+        the time.
 
         Returns:
             fitness, (np.array)
@@ -387,28 +391,32 @@ class Problem:
         arr = np.array(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
         return np.sum(np.multiply(arr, c)), arr
 
-    def sa_optimize(self, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
+    def sa_optimize(self, t, c, Nt, Nc, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
                     tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
         """
         Simulated annealing implementetion for finding a solution. Uses C extension.
         To compile the extension: "python3 salib/setup.py build_ext --inplace"
 
         Args:
-            coef (float, default=1.5):
+            t (float between (0, 1)): The time coefficient for multiobjective optimization.
+            c (float between (0, 1)): The cost coefficient for multiobjective optimization.
+            Nt (float): Divider to normalize the time objective.
+            Nc (float): Divider to normalize the cost objective.
+            coef (float, default=1.5): How bad the solution gets.
             rearrange_opt (int, default=0): if 1 -> opposite
                                        if 2 -> permute
                                        if 3 -> replace
                                        else -> swap
-            max_space (int, default=10): max space beetween tasks in swap
-            hamming_dist_perc (float, default=.1): maximum hamming distance accepted for permutation
-            temp_steps (int, default=100): number of temperature steps
-            tries_per_temp (int, default=100000): number of tries per temperature step
-            ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
-            ini_temperature (float, default=20.): initial temperature
-            cooling_rate (float, default=1.5): cooling rate
+            max_space (int, default=10): max space beetween tasks in swap...
+            hamming_dist_perc (float, default=.1): maximum hamming distance accepted for permutation.
+            temp_steps (int, default=100): number of temperature steps.
+            tries_per_temp (int, default=100000): number of tries per temperature step.
+            ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first.
+            ini_temperature (float, default=20.): initial temperature.
+            cooling_rate (float, default=1.5): cooling rate.
 
         Returns:
-            (float, list(int), list(float)): fitness, conf and fitness on each temperature step
+            (float, list(int), list(float)): fitness, conf and fitness on each temperature step.
 
         """
 
@@ -420,27 +428,31 @@ class Problem:
 
         n_tasks -= 1
 
+        tasks_costs = list(np.reshape(self.tasks_costs, (n_tasks * (self.days * self.shifts + 1), )))
+        teams_costs = list(np.reshape(self.teams_costs, (self.teams * (self.days * self.shifts + 1),)))
+
         # Run the simulated annealing algorithm in C
-        fitness, conf, ls_fitness = sa.run(self.days, self.shifts, self.teams, n_tasks, times, dists,
-                                           coef, rearrange_opt, max_space, hamming_dist_perc, temp_steps,
-                                           tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
+        fitness, conf, ls_fitness = sa.run(t, c, Nt, Nc, self.days, self.shifts, self.teams, n_tasks, times,
+                                           dists, tasks_costs, teams_costs, coef, rearrange_opt, max_space,
+                                           hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
+                                           ini_temperature, cooling_rate)
 
         return fitness, conf, ls_fitness
 
     @staticmethod
     def plot_fs_MC(fs, its, hist=True):
         """
-        Plots the fitnesses of the Monte Carlo simulation. If hist plots a histogram else box and whiskers.
+        Plots the fitness of the Monte Carlo simulation. If hist plots a histogram else box and whiskers.
 
         Args:
-            fs: fitnesses of the Monte Carlo simulation.
+            fs: fitness of the Monte Carlo simulation.
             its: Number of iterations of the Monte Carlo simulation.
             hist (boolean, default=True):
 
         """
         if hist:
             m, M = min(fs), max(fs)
-            # Plots the fitnesses
+            # Plots the fitness
             plt.hist(fs, np.arange(m, M, (M - m) / (its / 5)))  # Divide the interval in its / 5 chunks
         else:
             plt.boxplot(fs, vert=False)
@@ -448,17 +460,32 @@ class Problem:
         # Shows the plot
         plt.show()
 
-    def monte_carlo_simulation(self, fname, var_dists, var_times, its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10,
-                              hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10,
-                              ini_temperature=200, cooling_rate=.9):
+    def monte_carlo_simulation(self, fname, var_dists, var_times, var_cost_tasks, var_cost_teams, t, c, Nt, Nc,
+                               its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5,
+                               temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200,
+                               cooling_rate=.9):
         """
         Monte Carlo simulation. Uses C extension. To compile the extension: "python3 salib/setup.py build_ext --inplace"
-        Writes every solution (fitness and if print_conf configuration) in a file (fname) and returns the fitnesses
+        Writes every solution (fitness and if print_conf configuration) in a file (fname) and returns the fitness.
+
+        File format:
+
+        fitness_1 time cost
+        conf_1 % If print conf
+        ...
+        fitness_its
+        conf_its % If print conf
 
         Args:
             fname (str): File name to write results to.
             va_dists (list(float)): Variance for the distance between tasks.
             va_times (list(float)): Variance for tasks times.
+            var_cost_tasks (list(float)): Variance for tasks costs.
+            var_cost_teams (list(float)): Variance for temas costs.
+            t (float between (0, 1)): The time coefficient for multiobjective optimization.
+            c (float between (0, 1)): The cost coefficient for multiobjective optimization.
+            Nt (float): Divider to normalize the time objective.
+            Nc (float): Divider to normalize the cost objective.
             its (int, default=1000): Number of iterations for the Monte Carlo simulation.
             print_conf (boolean, default=True): True if write configuration to fname.
             coef (float, default=1.5):
@@ -475,7 +502,7 @@ class Problem:
             cooling_rate (float, default=1.5): cooling rate
 
         Returns:
-            list(double): The fitnesses of the Monte Carlo simulation
+            list(double): The fitness of the Monte Carlo simulation
 
         """
         n_tasks = self.tasks_loc.shape[0]
@@ -488,14 +515,137 @@ class Problem:
         times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
 
         n_tasks -= 1
+
+        costs_tasks = np.reshape(self.tasks_costs, (n_tasks * (self.days * self.shifts + 1),))
+        costs_tasks = [var_cost_tasks[i // 2] if i % 2 else costs_tasks[i // 2]
+                       for i in range(2 * costs_tasks.shape[0])]
+
+        costs_teams = np.reshape(self.teams_costs, (self.teams * (self.days * self.shifts + 1),))
+        costs_teams = [var_cost_teams[i // 2] if i % 2 else costs_teams[i // 2]
+                       for i in range(2 * costs_teams.shape[0])]
+
         # Run Monte Carlo simulation in C
-        sa.run_monte_carlo(fname, its, int(print_conf), self.days, self.shifts, self.teams, n_tasks, times, dists, coef, rearrange_opt,
-                             max_space, hamming_dist_perc, temp_steps, tries_per_temp, ini_tasks_to_rearrange,
-                             ini_temperature, cooling_rate)
+        sa.run_monte_carlo(fname, its, int(print_conf), t, c, Nt, Nc, self.days, self.shifts, self.teams, n_tasks,
+                           times, dists, costs_tasks, costs_teams, coef, rearrange_opt, max_space, hamming_dist_perc,
+                           temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
 
         fs = []
         # Read results of the Monte Carlo simulation
         with open(fname, 'r') as file:
-            fs = [float(line[:-1]) for i, line in enumerate(file.readlines()) if i % (print_conf + 1) == 0]
+            fs = [float(line[:-1].split(' ')[0]) for i, line in enumerate(file.readlines()) if i % (print_conf + 1) == 0]
 
         return fs
+
+    @staticmethod
+    def plot_MO(ls, pixels):
+        """
+        Plots the Monte Carlo simulation for multi-objectives.
+
+        Args:
+            ls (list(tuples(float) of len 3)): [(x1, y1, f1, time, cost), ...]
+            pixels (int): Number of pixels per dimension
+
+        """
+
+        def mean_bins(xs_, ys_, fs_, bins):
+
+            sum_ = np.zeros((len(bins), len(bins)))
+            count = np.zeros(sum_.shape, dtype=int)
+
+            for i in range(len(xs_)):
+                for j in range(len(bins)):
+                    for k in range(len(bins)):
+                        if xs_[i] < bins[j] and ys_[i] < bins[k]:
+                            count[j, k] += 1
+                            sum_[j, k] += fs_[i]
+                            break
+                    else:
+                        continue
+                    break
+
+            count[count == 0] = 1
+            return sum_ / count
+
+        xs, ys, _, times, costs = tuple(zip(*ls))
+
+        bins = [i / pixels for i in range(1, pixels + 1)]
+        means_t = mean_bins(xs, ys, times, bins)
+        means_c = mean_bins(xs, ys, costs, bins)
+
+        ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
+        
+        plt.subplot(1, 2, 1)
+        plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
+        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
+        plt.title('Tiempos')
+        plt.colorbar()
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(means_c, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
+        plt.title('Costes')
+
+        plt.colorbar()
+        plt.show()
+
+    def monte_carlo_simulation_MO(self, fname, Nt, Nc, its=1000, print_conf=True, coef=1.5, rearrange_opt=3,
+                                  max_space=10, hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000,
+                                  ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
+        """
+        Monte Carlo simulation using simulated annealing.
+        The uncertainty factors will be the coefficients of time and cost.
+        Writes every solution (fitness and if print_conf configuration) in a file (fname) and returns the fitness.
+        Writes every solution (t, c, fitness and if print_conf configuration) in a file (fname)
+        
+        File format:
+        
+        t1 c1 f1 time1 cost1
+        conf1 %if print_sol
+        ...
+
+        Args:
+            fname (str): File name to write results to.
+            Nt (float): Divider to normalize the time objective.
+            Nc (float): Divider to normalize the cost objective.
+            its (int, default=1000): Number of iterations for the Monte Carlo simulation.
+            print_conf (boolean, default=True): True if write configuration to fname.
+            coef (float, default=1.5):
+            rearrange_opt (int, default=0): if 1 -> opposite
+                                       if 2 -> permute
+                                       if 3 -> replace
+                                       else -> swap
+            max_space (int, default=10): max space beetween tasks in swap
+            hamming_dist_perc (float, default=.1): maximum hamming distance accepted for permutation
+            temp_steps (int, default=100): number of temperature steps
+            tries_per_temp (int, default=100000): number of tries per temperature step
+            ini_tasks_to_rearrange (int, default=100): number of tasks to rearrange at first
+            ini_temperature (float, default=20.): initial temperature
+            cooling_rate (float, default=1.5): cooling rate
+
+        Returns:
+            list(double): The fitness of the Monte Carlo simulation
+
+        """
+        n_tasks = self.tasks_loc.shape[0]
+
+        dists = list(np.reshape(self.tasks_dists, (n_tasks * n_tasks,)))
+        times = list(np.reshape(self.tasks_times, (self.teams * n_tasks,)))
+
+        n_tasks -= 1
+
+        tasks_costs = list(np.reshape(self.tasks_costs, (n_tasks * (self.days * self.shifts + 1),)))
+        teams_costs = list(np.reshape(self.teams_costs, (self.teams * (self.days * self.shifts + 1),)))
+
+        # Run Monte Carlo simulation in C
+        sa.run_monte_carlo_MO(fname, its, int(print_conf), Nt, Nc, self.days, self.shifts, self.teams, n_tasks,
+                              times, dists, tasks_costs, teams_costs, coef, rearrange_opt, max_space, hamming_dist_perc,
+                              temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate)
+
+        ls = []
+        # Read results of the Monte Carlo simulation
+        with open(fname, 'r') as file:
+            ls = [tuple(map(float, line[:-1].split(' ')))
+                  for i, line in enumerate(file.readlines()) if i % (print_conf + 1) == 0]
+
+        return ls

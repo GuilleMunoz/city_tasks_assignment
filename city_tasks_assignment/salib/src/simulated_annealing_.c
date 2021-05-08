@@ -52,14 +52,15 @@ int* create_conf(int n_tasks, int n_teams)
 
 /**
  * Evaluates a given solution. 
- * Sets the fitness of the solution to the correct value.
+ * Sets the fitness of the solution to the correct fitness and also returns de fitness.
  * 
  * @param sol pointer to a struct Solution
  * @return double, the fitness
  */
 static double evaluate(struct Solution* sol)
 {	
-	double total_time = 0, time, temp, coef;
+	double total_time = 0., time, temp, coef;
+	double cost = 0.;
 	int team, j, from, to, shifts, offset = sol->info->TASKS + 1;
 
 	for(team = 0; team < sol->info->TEAMS; team++)
@@ -81,6 +82,8 @@ static double evaluate(struct Solution* sol)
 			if (time + temp > 8)
 			{
 				time += sol->info->tasks_dists[from * offset];
+				cost += sol->info->team_cost[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
+
 				if (shifts > sol->info->DAYS * sol->info->SHIFTS)
 				{
 					total_time += coef * time;
@@ -97,12 +100,15 @@ static double evaluate(struct Solution* sol)
 			{
 				time += temp - sol->info->tasks_dists[to * offset];
 			}
+			cost += sol->info->task_cost[(to - 1) * sol->info->DAYS * sol->info->SHIFTS + shifts];
 
 			from = to;
 		}
 		if (from != 0)
 		{
 			time += sol->info->tasks_dists[from * offset];
+
+			cost += sol->info->team_cost[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
 			if (shifts > sol->info->DAYS * sol->info->SHIFTS)
 			{
 				total_time += coef * time;
@@ -114,8 +120,11 @@ static double evaluate(struct Solution* sol)
 		}
 		
 	}
-	sol->fitness = total_time;
-	return total_time;
+
+	sol->time = total_time;
+	sol->cost = cost;
+	sol->fitness = sol->info->t * sol->time / sol->info->Nt + sol->info->c * sol->cost / sol->info->Nc;
+	return sol->fitness;
 }
 
 
@@ -344,7 +353,7 @@ double * run(struct Solution *sol, int rearrange_opt, int temp_steps, double tri
 		for (int j = 0; j < tries_per_temp; j++)
 		{	
 			rearrange(sol, tasks_to_rearrange);
-			evaluate(sol);
+			evaluate(sol); 
 			diff = fitness - sol->fitness;
 			if (0 < diff || rand()/RAND_MAX < exp(diff / temperature)) // if better score or accept (metrop)
 			{ 

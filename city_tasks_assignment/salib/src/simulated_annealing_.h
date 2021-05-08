@@ -8,12 +8,20 @@ struct Info
 	double coef, hamming_dist_perc;
 	double* tasks_times; // [TEAMS][TASKS + 1]  = [:][BASE, TASK1, ...]
 	double* tasks_dists; // [TASKS + 1][TASKS + 1] = [BASE, TASK1, ...][BASE, TASK1, ...]
+
+	double t, c, Nt, Nc; // coefficients for multiobjective DIVIDED BY MAX
+
+	double* task_cost; // task_cost[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS
+
+	double* team_cost; // team_cost[i]([j]) team_cost[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)
 };
 
 struct Solution
 {
 	struct Info* info; // Information about the problem
-	double fitness; // Objective function
+	double fitness; // Fitness of the solution
+	double time; // Time of the solution (not normalized)
+	double cost; // Cost of the solution (not normalized)
 	int* configuration;  // Configuration of the solution: -1 or n where 1 <= n <= T
 };
 
