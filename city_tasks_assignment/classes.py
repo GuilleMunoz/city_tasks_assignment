@@ -391,17 +391,18 @@ class Problem:
         arr = np.array(ilp(c=c, A=A, b=b, G=G, h=h, B=set(range(c.size[0])))[1])
         return np.sum(np.multiply(arr, c)), arr
 
-    def sa_optimize(self, t, c, Nt, Nc, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5, temp_steps=300,
-                    tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200, cooling_rate=.9):
+    def sa_optimize(self, t=1, c=0, Nt=1, Nc=1, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5,
+                    temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200,
+                    cooling_rate=.9):
         """
-        Simulated annealing implementetion for finding a solution. Uses C extension.
-        To compile the extension: "python3 salib/setup.py build_ext --inplace"
+        Simulated annealing implementetion for finding a solution. By default, doesn't take into consideration th cost.
+        Uses the C extension, to compile it: "python3 salib/setup.py build_ext --inplace"
 
         Args:
-            t (float between (0, 1)): The time coefficient for multiobjective optimization.
-            c (float between (0, 1)): The cost coefficient for multiobjective optimization.
-            Nt (float): Divider to normalize the time objective.
-            Nc (float): Divider to normalize the cost objective.
+            t (float between (0, 1), default=1): The time coefficient for multiobjective optimization.
+            c (float between (0, 1), default=0): The cost coefficient for multiobjective optimization.
+            Nt (float, default=1): Divider to normalize the time objective.
+            Nc (float, default=1): Divider to normalize the cost objective.
             coef (float, default=1.5): How bad the solution gets.
             rearrange_opt (int, default=0): if 1 -> opposite
                                        if 2 -> permute
@@ -440,25 +441,31 @@ class Problem:
         return fitness, conf, ls_fitness
 
     @staticmethod
-    def plot_fs_MC(fs, its, hist=True):
+    def plot_fs_MC(fs, hist=True, savefig=False, filename='MC_fitness.png', dpi=100):
         """
         Plots the fitness of the Monte Carlo simulation. If hist plots a histogram else box and whiskers.
 
         Args:
             fs: fitness of the Monte Carlo simulation.
-            its: Number of iterations of the Monte Carlo simulation.
-            hist (boolean, default=True):
-
+            hist (boolean, default=True): True if plot histogram else box and whiskers
+            savefig (boolean, default=False): True if save the plot to a file
+            filename (str, default='MC_fitness.png'): Filename where the plot will be saved (if savefig)
+            dpi (int, default=100): Dots per inch of the image (if savefig)
         """
+
         if hist:
             m, M = min(fs), max(fs)
             # Plots the fitness
-            plt.hist(fs, np.arange(m, M, (M - m) / (its / 5)))  # Divide the interval in its / 5 chunks
+            plt.hist(fs, np.arange(m, M, (M - m) / (len(fs) / 5)))  # Divide the interval in its / 5 chunks
         else:
             plt.boxplot(fs, vert=False)
             plt.yticks([])
-        # Shows the plot
-        plt.show()
+
+        # Shows or saves the plot
+        if savefig:
+            plt.savefig(filename, dpi=dpi)
+        else:
+            plt.show()
 
     def monte_carlo_simulation(self, fname, var_dists, var_times, var_cost_tasks, var_cost_teams, t, c, Nt, Nc,
                                its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5,
@@ -537,14 +544,16 @@ class Problem:
         return fs
 
     @staticmethod
-    def plot_MO(ls, pixels):
+    def plot_MO(ls, pixels, savefig=False, filename='MC_MO.png', dpi=100):
         """
         Plots the Monte Carlo simulation for multi-objectives.
 
         Args:
             ls (list(tuples(float) of len 3)): [(x1, y1, f1, time, cost), ...]
             pixels (int): Number of pixels per dimension
-
+            savefig (boolean, default=False): True if save the plot to a file
+            filename (str, default='MC_MO.png'): Filename where the plot will be saved (if savefig)
+            dpi (int, default=100): Dots per inch of the image (if savefig)
         """
 
         def mean_bins(xs_, ys_, fs_, bins):
@@ -573,7 +582,8 @@ class Problem:
         means_c = mean_bins(xs, ys, costs, bins)
 
         ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
-        
+        plt.figure(figsize=(11, 4))
+
         plt.subplot(1, 2, 1)
         plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
@@ -584,10 +594,15 @@ class Problem:
         plt.subplot(1, 2, 2)
         plt.imshow(means_c, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
+        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
         plt.title('Costes')
-
         plt.colorbar()
-        plt.show()
+
+        # Shows or saves the plot
+        if savefig:
+            plt.savefig(filename, dpi=dpi)
+        else:
+            plt.show()
 
     def monte_carlo_simulation_MO(self, fname, Nt, Nc, its=1000, print_conf=True, coef=1.5, rearrange_opt=3,
                                   max_space=10, hamming_dist_perc=.5, temp_steps=300, tries_per_temp=10000,
@@ -624,7 +639,8 @@ class Problem:
             cooling_rate (float, default=1.5): cooling rate
 
         Returns:
-            list(double): The fitness of the Monte Carlo simulation
+            list(tuple(float)): [(t1, c1, , F1, T1, C1), ...] where F1, T1 and C1 are the fitness, time and cost
+                                of the solution found.
 
         """
         n_tasks = self.tasks_loc.shape[0]
