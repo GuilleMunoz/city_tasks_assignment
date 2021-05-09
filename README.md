@@ -37,3 +37,5 @@ Then use it as a normal package, for example:
 >>> p.create_random(11, 2, 2, 2)
 >>> f, sol, fs = p.sa_optimize(1, 0, 40, 20)
 ```
+
+For more examples, look at [this](plots.ipynb) jupyter notebook.
