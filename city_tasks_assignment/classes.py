@@ -544,59 +544,42 @@ class Problem:
         return fs
 
     @staticmethod
-    def plot_MO(ls, pixels, savefig=False, filename='MC_MO.png', dpi=100):
+    def plot_MO(ls, savefig=False, filename='MC_MO.png', dpi=100):
         """
-        Plots the Monte Carlo simulation for multi-objectives.
+        Plots the pareto frontier of the multi-objective optimization.
 
         Args:
             ls (list(tuples(float) of len 3)): [(x1, y1, f1, time, cost), ...]
-            pixels (int): Number of pixels per dimension
             savefig (boolean, default=False): True if save the plot to a file
             filename (str, default='MC_MO.png'): Filename where the plot will be saved (if savefig)
             dpi (int, default=100): Dots per inch of the image (if savefig)
         """
 
-        def mean_bins(xs_, ys_, fs_, bins):
+        def pareto(times_, costs_):
 
-            sum_ = np.zeros((len(bins), len(bins)))
-            count = np.zeros(sum_.shape, dtype=int)
+            scores = np.zeros((len(times_), 2))
 
-            for i in range(len(xs_)):
-                for j in range(len(bins)):
-                    for k in range(len(bins)):
-                        if xs_[i] < bins[j] and ys_[i] < bins[k]:
-                            count[j, k] += 1
-                            sum_[j, k] += fs_[i]
-                            break
-                    else:
-                        continue
-                    break
+            scores[:, 0] = times_
+            scores[:, 1] = costs_
 
-            count[count == 0] = 1
-            return sum_ / count
+            pareto_front = np.ones(scores.shape[0], dtype=bool)
 
-        xs, ys, _, times, costs = tuple(zip(*ls))
+            for i in range(scores.shape[0]):
+                for j in range(scores.shape[0]):
+                    if all(scores[j] <= scores[i]) and any(scores[j] < scores[i]):
+                        pareto_front[i] = 0
+                        break
 
-        bins = [i / pixels for i in range(1, pixels + 1)]
-        means_t = mean_bins(xs, ys, times, bins)
-        means_c = mean_bins(xs, ys, costs, bins)
+            return scores[pareto_front, 0], scores[pareto_front, 1]
 
-        ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
-        plt.figure(figsize=(11, 4))
+        _, _, _, times, costs = tuple(zip(*ls))
+        xs, ys = pareto(times, costs)
+        index = xs.argsort()
 
-        plt.subplot(1, 2, 1)
-        plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
-        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
-        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
-        plt.title('Tiempos')
-        plt.colorbar()
+        plt.scatter(times, costs, marker='D')
 
-        plt.subplot(1, 2, 2)
-        plt.imshow(means_c, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
-        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
-        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
-        plt.title('Costes')
-        plt.colorbar()
+        plt.plot(xs[index], ys[index], 'red')
+        plt.scatter(xs, ys, c='red', marker='D')
 
         # Shows or saves the plot
         if savefig:
