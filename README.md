@@ -24,9 +24,9 @@ All the heavy computational tasks are implemented using compiled languages such 
 
 ## Usage
 
-To use the package, first, you need to compile the C extension:
+To use the package, first, you need to compile the C extension, open a terminal in salib directory and compile it using:
  ```bash
- $ python3 city_tasks_assigment/city_tasks_assigment/salib/setup.py build_ext --inplace
+ $ python3 salib/setup.py build_ext --inplace
  ```
 
 Then use it as a normal package, for example:
