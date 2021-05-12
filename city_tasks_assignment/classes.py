@@ -544,7 +544,7 @@ class Problem:
         return fs
 
     @staticmethod
-    def plot_MO(ls, savefig=False, filename='MC_MO.png', dpi=100):
+    def plot_MO_pareto(ls, savefig=False, filename='MC_MO.png', dpi=100):
         """
         Plots the pareto frontier of the multi-objective optimization.
 
@@ -580,6 +580,66 @@ class Problem:
 
         plt.plot(xs[index], ys[index], 'red')
         plt.scatter(xs, ys, c='red', marker='D')
+
+        # Shows or saves the plot
+        if savefig:
+            plt.savefig(filename, dpi=dpi)
+        else:
+            plt.show()
+
+    @staticmethod
+    def plot_MO(ls, pixels, savefig=False, filename='MC_MO.png', dpi=100):
+        """
+        Plots the Monte Carlo simulation for multi-objectives.
+        Args:
+            ls (list(tuples(float) of len 3)): [(x1, y1, f1, time, cost), ...]
+            pixels (int): Number of pixels per dimension
+            savefig (boolean, default=False): True if save the plot to a file
+            filename (str, default='MC_MO.png'): Filename where the plot will be saved (if savefig)
+            dpi (int, default=100): Dots per inch of the image (if savefig)
+        """
+
+        def mean_bins(xs_, ys_, fs_, bins):
+
+            sum_ = np.zeros((len(bins), len(bins)))
+            count = np.zeros(sum_.shape, dtype=int)
+
+            for i in range(len(xs_)):
+                for j in range(len(bins)):
+                    for k in range(len(bins)):
+                        if xs_[i] < bins[j] and ys_[i] < bins[k]:
+                            count[j, k] += 1
+                            sum_[j, k] += fs_[i]
+                            break
+                    else:
+                        continue
+                    break
+
+            count[count == 0] = 1
+            return sum_ / count
+
+        xs, ys, _, times, costs = tuple(zip(*ls))
+
+        bins = [i / pixels for i in range(1, pixels + 1)]
+        means_t = mean_bins(xs, ys, times, bins)
+        means_c = mean_bins(xs, ys, costs, bins)
+
+        ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
+        plt.figure(figsize=(11, 4))
+
+        plt.subplot(1, 2, 1)
+        plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
+        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
+        plt.title('Tiempos')
+        plt.colorbar()
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(means_c, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
+        plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
+        plt.title('Costes')
+        plt.colorbar()
 
         # Shows or saves the plot
         if savefig:
