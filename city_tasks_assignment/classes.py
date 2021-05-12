@@ -467,7 +467,7 @@ class Problem:
         else:
             plt.show()
 
-    def monte_carlo_simulation(self, fname, var_dists, var_times, var_cost_tasks, var_cost_teams, t, c, Nt, Nc,
+    def monte_carlo_simulation(self, fname, var_dists, var_times, var_cost_tasks, var_cost_teams, t=1, c=0, Nt=1, Nc=1,
                                its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5,
                                temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200,
                                cooling_rate=.9):
@@ -489,10 +489,10 @@ class Problem:
             va_times (list(float)): Variance for tasks times.
             var_cost_tasks (list(float)): Variance for tasks costs.
             var_cost_teams (list(float)): Variance for temas costs.
-            t (float between (0, 1)): The time coefficient for multiobjective optimization.
-            c (float between (0, 1)): The cost coefficient for multiobjective optimization.
-            Nt (float): Divider to normalize the time objective.
-            Nc (float): Divider to normalize the cost objective.
+            t (float, default=1): The time coefficient for multiobjective optimization. Between (0, 1)
+            c (float, default=0): The cost coefficient for multiobjective optimization. Between (0, 1)
+            Nt (float, default=1): Divider to normalize the time objective.
+            Nc (float, default=1): Divider to normalize the cost objective.
             its (int, default=1000): Number of iterations for the Monte Carlo simulation.
             print_conf (boolean, default=True): True if write configuration to fname.
             coef (float, default=1.5):
