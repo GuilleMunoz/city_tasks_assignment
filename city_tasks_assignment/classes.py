@@ -279,7 +279,7 @@ class Problem:
         max_tasks_per_day = int(8 / (np.min(self.tasks_times[:, 1:]) + np.min(self.tasks_dists[1:, 1:])))
         max_tasks_per_day = min(max_tasks_per_day, T) + 1
 
-        c_ = times + self.tasks_dists  # TODO: Añadir tiempos a distancias a latex
+        c_ = times + self.tasks_dists
         c = np.tile(c_.flatten(), self.days * self.shifts)
 
         n_b = T  # (1)
@@ -485,8 +485,8 @@ class Problem:
 
         Args:
             fname (str): File name to write results to.
-            va_dists (list(float)): Variance for the distance between tasks.
-            va_times (list(float)): Variance for tasks times.
+            var_dists (list(float)): Variance for the distance between tasks.
+            var_times (list(float)): Variance for tasks times.
             var_cost_tasks (list(float)): Variance for tasks costs.
             var_cost_teams (list(float)): Variance for temas costs.
             t (float, default=1): The time coefficient for multiobjective optimization. Between (0, 1)
