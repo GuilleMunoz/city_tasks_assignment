@@ -92,8 +92,8 @@ PyDoc_STRVAR(py_run_doc,
                 "   ntasks (int): Number of tasks (WITHOUT THE BASE)\n"
                 "   tasks_times (1d list(double)): List of times: t_{ij} = time that team i spends on task j t_{i0} = 0\n"
                 "   tasks_dists (1d list(double)): List of dists: distance between tasks\n"
-                "   task_cost (list(double)): task_cost[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS\n"
-                "   team_cost (list(double): team_cost[i]([j]) team_cost[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)\n"
+                "   tasks_costs (list(double)): tasks_costs[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS\n"
+                "   teams_costs (list(double): teams_costs[i]([j]) teams_costs[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)\n"
                 "   coef (double): Coefficient that will be multiplied to the shift time if the team has to work more\n"
                 "   rearrange_opt (int): 1 -> opposite,\n"
                 "                        2 -> permute,\n"
@@ -265,8 +265,8 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
 
 	PyObject* mean_var_times; double *mean_var_t;
     PyObject* mean_var_dists; double *mean_var_d;
-    PyObject* mean_var_task_cost; double *mean_var_task_c;
-    PyObject* mean_var_team_cost; double *mean_var_team_c;
+    PyObject* mean_var_tasks_costs; double *mean_var_task_c;
+    PyObject* mean_var_teams_costs; double *mean_var_team_c;
     char *fname;
     char *message;
 
@@ -279,7 +279,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     if(!PyArg_ParseTuple(args, "siiddddiiiiOOOOdiidididd", &fname, &its, &print_conf, 
                          &t, &c, &Nt, &Nc, &n_days, &n_shifts, &n_teams, 
                          &n_tasks, &mean_var_times, &mean_var_dists, 
-                         &mean_var_task_cost, &mean_var_team_cost, &coef, 
+                         &mean_var_tasks_costs, &mean_var_teams_costs, &coef, 
                          &rearrange_opt, &max_space, &hamming_dist_perc,
                          &temp_steps, &tries_per_temp, &ini_tasks_to_rearrange,
                          &ini_temperature, &cooling_rate))
@@ -290,8 +290,8 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
 
     mean_var_t = to_arr(mean_var_times, 2 * n_teams * (n_tasks + 1));
     mean_var_d = to_arr(mean_var_dists, 2 * (n_tasks + 1) * (n_tasks + 1));
-    mean_var_task_c = to_arr(mean_var_task_cost, 2 * n_tasks * (n_days * n_shifts + 1));
-    mean_var_team_c = to_arr(mean_var_task_cost, 2 * n_teams * (n_days * n_shifts + 1));
+    mean_var_task_c = to_arr(mean_var_tasks_costs, 2 * n_tasks * (n_days * n_shifts + 1));
+    mean_var_team_c = to_arr(mean_var_tasks_costs, 2 * n_teams * (n_days * n_shifts + 1));
 
     // Seed sdtlib random generator with current time
     srand(time(NULL));
@@ -319,8 +319,8 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
         // Defines random times (normal distribution)
         arr_norm(mean_var_t, sol.info->tasks_times, n_teams * (n_tasks + 1));
         arr_norm(mean_var_d, sol.info->tasks_dists, (n_tasks + 1) * (n_tasks + 1));
-        arr_norm(mean_var_task_c, sol.info->task_cost, n_tasks * (n_days * n_shifts + 1));
-        arr_norm(mean_var_team_c, sol.info->team_cost, n_teams * (n_days * n_shifts + 1));
+        arr_norm(mean_var_task_c, sol.info->tasks_costs, n_tasks * (n_days * n_shifts + 1));
+        arr_norm(mean_var_team_c, sol.info->teams_costs, n_teams * (n_days * n_shifts + 1));
 
         // Run simulatted annealing
         run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate,
@@ -330,7 +330,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     }
     fclose(fp);
 
-    free(info.tasks_times); free(info.tasks_dists); free(info.task_cost); free(info.team_cost);
+    free(info.tasks_times); free(info.tasks_dists); free(info.tasks_costs); free(info.teams_costs);
     free(sol.configuration); 
     free(mean_var_t); free(mean_var_d); free(mean_var_task_c); free(mean_var_team_c);
     return Py_BuildValue("");
@@ -357,8 +357,8 @@ PyDoc_STRVAR(py_run_monte_carlo_MO_doc,
                 "   ntasks (int): Number of tasks (WITHOUT THE BASE)\n"
                 "   tasks_times (1d list(double)): List of times: t_{ij} = time that team i spends on task j t_{i0} = 0\n"
                 "   tasks_dists (1d list(double)): List of dists: distance between tasks\n"
-                "   task_cost (list(double)): task_cost[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS\n"
-                "   team_cost (list(double): team_cost[i]([j]) team_cost[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)\n"
+                "   tasks_costs (list(double)): tasks_costs[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS\n"
+                "   teams_costs (list(double): teams_costs[i]([j]) teams_costs[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)\n"
                 "   coef (double): Coefficient that will be multiplied to the shift time if the team has to work more\n"
                 "   rearrange_opt (int): 1 -> opposite,\n"
                 "                        2 -> permute,\n"
@@ -448,7 +448,7 @@ static PyObject *py_run_monte_carlo_MO(PyObject *self, PyObject *args)
     }
     fclose(fp);
 
-    free(info.tasks_times); free(info.tasks_dists); free(info.task_cost); free(info.team_cost);
+    free(info.tasks_times); free(info.tasks_dists); free(info.tasks_costs); free(info.teams_costs);
     free(sol.configuration);
     return Py_BuildValue("");
 }

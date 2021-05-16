@@ -9,11 +9,11 @@ struct Info
 	double* tasks_times; // [TEAMS][TASKS + 1]  = [:][BASE, TASK1, ...]
 	double* tasks_dists; // [TASKS + 1][TASKS + 1] = [BASE, TASK1, ...][BASE, TASK1, ...]
 
-	double t, c, Nt, Nc; // coefficients for multiobjective DIVIDED BY MAX
+	double t, c, Nt, Nc; // coefficients for multiobjective
 
-	double* task_cost; // task_cost[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS
+	double* tasks_costs; // tasks_costs[i][j] cost of doing task i on shift j,  0 <= i < TASKS, 0 <= j <= DAYS * SHIFTS
 
-	double* team_cost; // team_cost[i]([j]) team_cost[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)
+	double* teams_costs; // teams_costs[i]([j]) teams_costs[i] cost of hiring team i (on shift j), 0 <= i < TEAMS (0 <= j <= DAYS * SHIFTS)
 };
 
 struct Solution

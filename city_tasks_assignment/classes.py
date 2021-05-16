@@ -10,20 +10,21 @@ from city_tasks_assignment.salib import simulated_annealing as sa
 
 class Problem:
 
-    def __init__(self, file_name=None, dists_given=False):
+    def __init__(self, file_name=None, dists_given=False, directed=True):
         # task_loc[0] = location of the base
         self.tasks_loc = np.array([])
-        # task_times[0] = 0
-        self.tasks_times = np.array([])
 
+        self.tasks_times = np.array([])
         self.tasks_dists = np.array([])
+        self.tasks_costs = np.array([])
+        self.teams_costs = np.array([])
 
         self.days = 0
         self.shifts = 2
         self.teams = 1
 
         if file_name is not None:
-            self.load(file_name, dists_given=dists_given)
+            self.load(file_name, dists_given=dists_given, directed=directed)
 
     def compute_dists(self, graph):
         """
@@ -79,7 +80,7 @@ class Problem:
             np.fill_diagonal(self.tasks_dists, 0)
             self.tasks_dists *= 2
 
-    def load(self, file_name, dists_given=False):
+    def load(self, file_name, dists_given=False, directed=True):
         """
         Loads a problem from one or two (if not dists_given) files. The first one <file_name>.tasks
         gives general info of the problem number of days, ... and the second contains the graph edges.
@@ -88,15 +89,29 @@ class Problem:
         *************** "<file_name>.tasks" ***************
 
         <Number of days (int)> D
+        <Number of shifts (int)> S
         <Number of teams (int)> E
-
         <base location (int)> n
 
         <tasks locations on the graph (ints)> n1 n2 ... nj
+
         <tasks times of team 0 (floats)> t1 t2 ... -1 % -1 = inf
         <tasks times of team 1 (floats)> t1 -1 ... tj
         ...
         <tasks times of team E (floats)> -1 t2 ... -1
+
+        <costs of hiring team 0 on each shift (floats)> c01 c02 ... c0(D*S) c0(D*S + 1)
+        % The last one corresponds to hiring team 0 to many shifts
+        <costs of hiring team 1 on each shift (floats)> c11 c12 ... c1(D*S) c1(D*S + 1)
+        ...
+        <costs of hiring team E on each shift (floats)> cE1 cE2 ... cE(D*S) cE(D*S + 1)
+
+        <costs of postponing task 1 on each shift (floats)> c11 c12 ... c1(D*S) c1(D*S + 1)
+        % The last one corresponds to hiring team 0 to many shifts
+        <costs of postponing task 2 on each shift (floats)> c21 c22 ... c2(D*S) c2(D*S + 1)
+        ...
+        <costs of postponing task T on each shift (floats)> cT1 cT2 ... cT(D*S) cT(D*S + 1)
+        % Here T = number of tasks (without the base)
 
         % OPTIONAL
         <distance from 0 to the others (floats)> d00 d01 ... d0j
@@ -116,24 +131,36 @@ class Problem:
         Args:
             file_name (str): the name of the file (without the extension)
             dists_given (bool): True if the distances are given in "<file_name>.tasks"
+            directed (bool, default=True): True if the given graph is directed
         """
-        import networkit as nk
 
         with open(file_name + '.tasks', 'r') as tasks_file:
 
             self.days = int(tasks_file.readline()[:-1])
+            self.shifts = int(tasks_file.readline()[:-1])
             self.teams = int(tasks_file.readline()[:-1])
             self.tasks_loc = [int(tasks_file.readline()[:-1])] + list(map(int, tasks_file.readline()[:-1].split(' ')))
-            # self.tasks_times = list(map(float, tasks_file.readline()[:-1].split(' ')))
 
             self.tasks_loc = np.array(self.tasks_loc)
-            self.tasks_times = np.zeros((self.teams, self.tasks_loc.shape[0]))
 
+            self.tasks_times = np.zeros((self.teams, self.tasks_loc.shape[0]))
             for i in range(self.teams):
                 line = tasks_file.readline()
                 times = [0.] + list(map(float, line[:-1].split(' ')))
                 self.tasks_times[i] = np.array(times)
                 self.tasks_times[i, self.tasks_times[i] < 0] = np.inf
+
+            self.teams_costs = np.zeros((self.teams, self.days * self.shifts + 1))
+            for i in range(self.teams):
+                line = tasks_file.readline()
+                costs = list(map(float, line[:-1].split(' ')))
+                self.teams_costs[i] = np.array(costs)
+
+            self.tasks_costs = np.zeros((self.tasks_loc.shape[0] - 1, self.days * self.shifts + 1))
+            for i in range(self.tasks_loc.shape[0] - 1):
+                line = tasks_file.readline()
+                costs = list(map(float, line[:-1].split(' ')))
+                self.tasks_costs[i] = np.array(costs)
 
             if dists_given:
                 self.tasks_dists = np.empty((self.tasks_times.shape[0], self.tasks_times.shape[0]))
@@ -141,7 +168,7 @@ class Problem:
                     self.tasks_dists[i] = np.array(map(float, line[:-1].split(' ')))
 
         if not dists_given and isfile(file_name + '.graph'):
-            graph = nk.readGraph(file_name + '.graph', nk.Format.EdgeList, separator=' ', firstNode=0, directed=True)
+            graph = nk.readGraph(file_name + '.graph', nk.Format.EdgeList, separator=' ', firstNode=0, directed=directed)
             self.compute_dists(graph)
 
     def to_std_ilp(self, ls):
@@ -457,6 +484,7 @@ class Problem:
             m, M = min(fs), max(fs)
             # Plots the fitness
             plt.hist(fs, np.arange(m, M, (M - m) / (len(fs) / 5)))  # Divide the interval in its / 5 chunks
+            plt.xlabel('Evaluación de la solución')
         else:
             plt.boxplot(fs, vert=False)
             plt.yticks([])
@@ -544,7 +572,7 @@ class Problem:
         return fs
 
     @staticmethod
-    def plot_MO_pareto(ls, savefig=False, filename='MC_MO.png', dpi=100):
+    def plot_MO_pareto(ls, savefig=False, filename='MC_MO_pareto.png', dpi=100):
         """
         Plots the pareto frontier of the multi-objective optimization.
 
@@ -580,6 +608,9 @@ class Problem:
 
         plt.plot(xs[index], ys[index], 'red')
         plt.scatter(xs, ys, c='red', marker='D')
+        plt.xlabel('Tiempo')
+        plt.ylabel('Coste')
+        plt.title('Frontera de Pareto')
 
         # Shows or saves the plot
         if savefig:
@@ -625,12 +656,14 @@ class Problem:
         means_c = mean_bins(xs, ys, costs, bins)
 
         ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
-        plt.figure(figsize=(11, 4))
+        plt.figure(figsize=(11, 4.5))
 
         plt.subplot(1, 2, 1)
         plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
         plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
+        plt.xlabel('c')
+        plt.ylabel('t')
         plt.title('Tiempos')
         plt.colorbar()
 
@@ -639,6 +672,8 @@ class Problem:
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
         plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
         plt.title('Costes')
+        plt.xlabel('c')
+        plt.ylabel('t')
         plt.colorbar()
 
         # Shows or saves the plot

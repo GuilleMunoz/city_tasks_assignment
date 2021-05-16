@@ -82,7 +82,7 @@ static double evaluate(struct Solution* sol)
 			if (time + temp > 8)
 			{
 				time += sol->info->tasks_dists[from * offset];
-				cost += sol->info->team_cost[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
+				cost += sol->info->teams_costs[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
 
 				if (shifts > sol->info->DAYS * sol->info->SHIFTS)
 				{
@@ -100,7 +100,7 @@ static double evaluate(struct Solution* sol)
 			{
 				time += temp - sol->info->tasks_dists[to * offset];
 			}
-			cost += sol->info->task_cost[(to - 1) * sol->info->DAYS * sol->info->SHIFTS + shifts];
+			cost += sol->info->tasks_costs[(to - 1) * sol->info->DAYS * sol->info->SHIFTS + shifts];
 
 			from = to;
 		}
@@ -108,7 +108,7 @@ static double evaluate(struct Solution* sol)
 		{
 			time += sol->info->tasks_dists[from * offset];
 
-			cost += sol->info->team_cost[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
+			cost += sol->info->teams_costs[team * (sol->info->DAYS * sol->info->SHIFTS + 1) + shifts];
 			if (shifts > sol->info->DAYS * sol->info->SHIFTS)
 			{
 				total_time += coef * time;
