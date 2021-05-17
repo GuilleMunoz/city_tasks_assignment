@@ -467,35 +467,7 @@ class Problem:
 
         return fitness, conf, ls_fitness
 
-    @staticmethod
-    def plot_fs_MC(fs, hist=True, savefig=False, filename='MC_fitness.png', dpi=100):
-        """
-        Plots the fitness of the Monte Carlo simulation. If hist plots a histogram else box and whiskers.
-
-        Args:
-            fs: fitness of the Monte Carlo simulation.
-            hist (boolean, default=True): True if plot histogram else box and whiskers
-            savefig (boolean, default=False): True if save the plot to a file
-            filename (str, default='MC_fitness.png'): Filename where the plot will be saved (if savefig)
-            dpi (int, default=100): Dots per inch of the image (if savefig)
-        """
-
-        if hist:
-            m, M = min(fs), max(fs)
-            # Plots the fitness
-            plt.hist(fs, np.arange(m, M, (M - m) / (len(fs) / 5)))  # Divide the interval in its / 5 chunks
-            plt.xlabel('Evaluación de la solución')
-        else:
-            plt.boxplot(fs, vert=False)
-            plt.yticks([])
-
-        # Shows or saves the plot
-        if savefig:
-            plt.savefig(filename, dpi=dpi)
-        else:
-            plt.show()
-
-    def monte_carlo_simulation(self, fname, var_dists, var_times, var_cost_tasks, var_cost_teams, t=1, c=0, Nt=1, Nc=1,
+    def monte_carlo_simulation(self, fname, std_dists, std_times, std_cost_tasks, std_cost_teams, t=1, c=0, Nt=1, Nc=1,
                                its=1000, print_conf=True, coef=1.5, rearrange_opt=3, max_space=10, hamming_dist_perc=.5,
                                temp_steps=300, tries_per_temp=10000, ini_tasks_to_rearrange=10, ini_temperature=200,
                                cooling_rate=.9):
@@ -513,10 +485,10 @@ class Problem:
 
         Args:
             fname (str): File name to write results to.
-            var_dists (list(float)): Variance for the distance between tasks.
-            var_times (list(float)): Variance for tasks times.
-            var_cost_tasks (list(float)): Variance for tasks costs.
-            var_cost_teams (list(float)): Variance for temas costs.
+            std_dists (list(float)): Standard deviation of the distance between tasks.
+            std_times (list(float)): Standard deviation of tasks times.
+            std_cost_tasks (list(float)): Standard deviation of tasks costs.
+            std_cost_teams (list(float)): Standard deviation of temas costs.
             t (float, default=1): The time coefficient for multiobjective optimization. Between (0, 1)
             c (float, default=0): The cost coefficient for multiobjective optimization. Between (0, 1)
             Nt (float, default=1): Divider to normalize the time objective.
@@ -542,21 +514,21 @@ class Problem:
         """
         n_tasks = self.tasks_loc.shape[0]
 
-        # Join mean and variance arrays
+        # Join mean and standard deviation
         dists = np.reshape(self.tasks_dists, (n_tasks * n_tasks,))
-        dists = [var_dists[i // 2] if i % 2 else dists[i // 2] for i in range(2 * dists.shape[0])]
+        dists = [std_dists[i // 2] if i % 2 else dists[i // 2] for i in range(2 * dists.shape[0])]
 
         times = np.reshape(self.tasks_times, (self.teams * n_tasks,))
-        times = [var_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
+        times = [std_times[i // 2] if i % 2 else times[i // 2] for i in range(2 * times.shape[0])]
 
         n_tasks -= 1
 
         costs_tasks = np.reshape(self.tasks_costs, (n_tasks * (self.days * self.shifts + 1),))
-        costs_tasks = [var_cost_tasks[i // 2] if i % 2 else costs_tasks[i // 2]
+        costs_tasks = [std_cost_tasks[i // 2] if i % 2 else costs_tasks[i // 2]
                        for i in range(2 * costs_tasks.shape[0])]
 
         costs_teams = np.reshape(self.teams_costs, (self.teams * (self.days * self.shifts + 1),))
-        costs_teams = [var_cost_teams[i // 2] if i % 2 else costs_teams[i // 2]
+        costs_teams = [std_cost_teams[i // 2] if i % 2 else costs_teams[i // 2]
                        for i in range(2 * costs_teams.shape[0])]
 
         # Run Monte Carlo simulation in C

@@ -173,20 +173,20 @@ static PyObject *py_run(PyObject *self, PyObject *args)
 /**
  * 
  * Defines a random array (arr) has to be allocated with length len.
- * The mean and variance of each element is defined in mean_var_arr:
- *      The mean of the i-th element is mean_var_arr[2i]
- *      The variance of the ith element is mean_var_arr[2i + 1]
+ * The mean and standard deviation of each element is defined in mean_std_arr:
+ *      The mean of the i-th element is mean_std_arr[2i]
+ *      The standard deviation of the ith element is mean_std_arr[2i + 1]
  * 
- * @param mean_var_arr pointer to array of doubles, the mean and variance. The length has to be >= 2 * len.
+ * @param mean_std_arr pointer to array of doubles, the mean and std. The length has to be >= 2 * len.
  * @param arr pointer to array of doubles, the random array
  * @param len int, length of arr
 */
-static void arr_norm(double *mean_var_arr, double *arr, int len)
+static void arr_norm(double *mean_std_arr, double *arr, int len)
 {
 
     for (int i = 0; i < len; i++)
     {
-        arr[i] = mean_var_arr[2 * i] + norm((double) rand() / RAND_MAX) * mean_var_arr[2*i + 1];
+        arr[i] = mean_std_arr[2 * i] + norm((double) rand() / RAND_MAX) * mean_std_arr[2*i + 1];
     }
 }
 
@@ -234,10 +234,10 @@ PyDoc_STRVAR(py_run_monte_carlo_doc,
                 "   nshifts (int): Number of shifts.\n"
                 "   nteams (int): Number of teams.\n"
                 "   ntasks (int): Number of tasks (WITHOUT THE BASE).\n"
-                "   mean_var_times (1d list(double)): List of times of length 2 * nteams * (ntasks + 1)\n"
-                "   mean_var_dists (1d list(double)): List of dists of length 2 * (ntasks + 1)^2\n"
-                "   mean_var_tasks_costs (1d list(double)): List of dists of length ntasks * (ndays * nshifts + 1)\n"
-                "   mean_var_teams_costs (1d list(double)): List of dists of length nteams * (ndays * nshifts + 1)\n"
+                "   mean_std_times (1d list(double)): List of times of length 2 * nteams * (ntasks + 1)\n"
+                "   mean_std_dists (1d list(double)): List of dists of length 2 * (ntasks + 1)^2\n"
+                "   mean_std_tasks_costs (1d list(double)): List of dists of length ntasks * (ndays * nshifts + 1)\n"
+                "   mean_std_teams_costs (1d list(double)): List of dists of length nteams * (ndays * nshifts + 1)\n"
                 "   coef (double): Coefficient that will be multiplied to the shift time if the team has to work more\n"
                 "   rearrange_opt (int): 1 -> opposite,\n"
                 "                        2 -> permute,\n"
@@ -263,10 +263,10 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     int its, print_conf;
     FILE *fp;
 
-	PyObject* mean_var_times; double *mean_var_t;
-    PyObject* mean_var_dists; double *mean_var_d;
-    PyObject* mean_var_tasks_costs; double *mean_var_task_c;
-    PyObject* mean_var_teams_costs; double *mean_var_team_c;
+	PyObject* mean_std_times; double *mean_std_t;
+    PyObject* mean_std_dists; double *mean_std_d;
+    PyObject* mean_std_tasks_costs; double *mean_std_task_c;
+    PyObject* mean_std_teams_costs; double *mean_std_team_c;
     char *fname;
     char *message;
 
@@ -278,8 +278,8 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     // Pass args
     if(!PyArg_ParseTuple(args, "siiddddiiiiOOOOdiidididd", &fname, &its, &print_conf, 
                          &t, &c, &Nt, &Nc, &n_days, &n_shifts, &n_teams, 
-                         &n_tasks, &mean_var_times, &mean_var_dists, 
-                         &mean_var_tasks_costs, &mean_var_teams_costs, &coef, 
+                         &n_tasks, &mean_std_times, &mean_std_dists,
+                         &mean_std_tasks_costs, &mean_std_teams_costs, &coef,
                          &rearrange_opt, &max_space, &hamming_dist_perc,
                          &temp_steps, &tries_per_temp, &ini_tasks_to_rearrange,
                          &ini_temperature, &cooling_rate))
@@ -288,10 +288,10 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
     }
     message = (char*) malloc(((int)log10(its) + 1)*sizeof(char));
 
-    mean_var_t = to_arr(mean_var_times, 2 * n_teams * (n_tasks + 1));
-    mean_var_d = to_arr(mean_var_dists, 2 * (n_tasks + 1) * (n_tasks + 1));
-    mean_var_task_c = to_arr(mean_var_tasks_costs, 2 * n_tasks * (n_days * n_shifts + 1));
-    mean_var_team_c = to_arr(mean_var_tasks_costs, 2 * n_teams * (n_days * n_shifts + 1));
+    mean_std_t = to_arr(mean_std_times, 2 * n_teams * (n_tasks + 1));
+    mean_std_d = to_arr(mean_std_dists, 2 * (n_tasks + 1) * (n_tasks + 1));
+    mean_std_task_c = to_arr(mean_std_tasks_costs, 2 * n_tasks * (n_days * n_shifts + 1));
+    mean_std_team_c = to_arr(mean_std_teams_costs, 2 * n_teams * (n_days * n_shifts + 1));
 
     // Seed sdtlib random generator with current time
     srand(time(NULL));
@@ -317,10 +317,10 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
         sprintf(message, "%d: ", i);
 
         // Defines random times (normal distribution)
-        arr_norm(mean_var_t, sol.info->tasks_times, n_teams * (n_tasks + 1));
-        arr_norm(mean_var_d, sol.info->tasks_dists, (n_tasks + 1) * (n_tasks + 1));
-        arr_norm(mean_var_task_c, sol.info->tasks_costs, n_tasks * (n_days * n_shifts + 1));
-        arr_norm(mean_var_team_c, sol.info->teams_costs, n_teams * (n_days * n_shifts + 1));
+        arr_norm(mean_std_t, sol.info->tasks_times, n_teams * (n_tasks + 1));
+        arr_norm(mean_std_d, sol.info->tasks_dists, (n_tasks + 1) * (n_tasks + 1));
+        arr_norm(mean_std_task_c, sol.info->tasks_costs, n_tasks * (n_days * n_shifts + 1));
+        arr_norm(mean_std_team_c, sol.info->teams_costs, n_teams * (n_days * n_shifts + 1));
 
         // Run simulatted annealing
         run(&sol, rearrange_opt, temp_steps, tries_per_temp, ini_tasks_to_rearrange, ini_temperature, cooling_rate,
@@ -332,7 +332,7 @@ static PyObject *py_run_monte_carlo(PyObject *self, PyObject *args)
 
     free(info.tasks_times); free(info.tasks_dists); free(info.tasks_costs); free(info.teams_costs);
     free(sol.configuration); 
-    free(mean_var_t); free(mean_var_d); free(mean_var_task_c); free(mean_var_team_c);
+    free(mean_std_t); free(mean_std_d); free(mean_std_task_c); free(mean_std_team_c);
     return Py_BuildValue("");
 }
 
