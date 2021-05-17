@@ -38,4 +38,5 @@ Then use it as a normal package, for example:
 >>> f, sol, fs = p.sa_optimize(1, 0, 40, 20)
 ```
 
-For more examples, look at [this](plots.ipynb) jupyter notebook.
+For more examples, check [this](plots.ipynb) jupyter notebook. 
+To check how to analyse a stochastic problem refer to [this](stochastic.ipynb) notebook.
