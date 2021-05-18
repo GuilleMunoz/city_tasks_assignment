@@ -6,7 +6,9 @@ from cvxopt import matrix
 from math import comb
 from os.path import isfile
 from matplotlib import pyplot as plt
+from matplotlib import cm
 from city_tasks_assignment.salib import simulated_annealing as sa
+import copy
 
 class Problem:
 
@@ -625,13 +627,17 @@ class Problem:
 
         bins = [i / pixels for i in range(1, pixels + 1)]
         means_t = mean_bins(xs, ys, times, bins)
+        means_t[means_t == 0] = np.nan
         means_c = mean_bins(xs, ys, costs, bins)
+        means_c[means_c == 0] = np.nan
 
         ticks = ["{:.2f}".format(i) for i in np.arange(.1, 1.1, .1)]
         plt.figure(figsize=(11, 4.5))
+        current_cmap = copy.copy(cm.get_cmap('rainbow'))
+        current_cmap.set_bad(color='white')
 
         plt.subplot(1, 2, 1)
-        plt.imshow(means_t, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.imshow(means_t, interpolation='nearest', cmap=current_cmap, origin='lower')
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
         plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
         plt.xlabel('c')
@@ -640,7 +646,7 @@ class Problem:
         plt.colorbar()
 
         plt.subplot(1, 2, 2)
-        plt.imshow(means_c, interpolation='nearest', cmap=plt.get_cmap('gray'), origin='lower')
+        plt.imshow(means_c, interpolation='nearest', cmap=current_cmap, origin='lower')
         plt.xticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks, rotation=90)
         plt.yticks(np.arange(pixels / 10 - .5, pixels, pixels / 10), ticks)
         plt.title('Costes')
