@@ -20,7 +20,8 @@ You will need the following software to use the package:
 
 ## Software
 
-All the heavy computational tasks are implemented using compiled languages such as C or C++. 
+There is an exact method and a metaheuristic (simulated annealing).
+All the heavy computational tasks are implemented using compiled languages such as C or C++.
 
 ## Usage
 
